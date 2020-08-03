@@ -66,7 +66,7 @@ class rdfSubject(object):
             self.resUri = resUri.resUri
             self.db = resUri.db
 
-        elif isinstance(resUri, (str, unicode)):   # create one from a <uri> or
+        elif isinstance(resUri, (str, str)):   # create one from a <uri> or
             if resUri[0] == "<" and resUri[-1] == ">":  # _:bnode string
                 self.resUri = URIRef(resUri[1:-1])
             elif resUri.startswith("_:"):
@@ -328,6 +328,7 @@ class rdfSubject(object):
         returning all predicate object pairs with qnames"""
         db = db or self.db
         for p, o in db.predicate_objects(self.resUri):
-            print "%20s = %s" % (db.qname(p), str(o))
-        print " "
+            print("%20s = %s" % (db.qname(p), str(o)))
+            # print "%20s = %s" % (db.qname(p), str(o))
+        print(" ")
 
