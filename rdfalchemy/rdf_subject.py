@@ -5,23 +5,21 @@ rdfalchemy.py - a Simple API for RDF
 Requires rdflib <http://www.rdflib.net/> version 2.3 ??.
 
 """
+from functools import total_ordering
+import re
+import logging
+import warnings
 
-from rdflib import ConjunctiveGraph, __version__ as rdflibversion
+from rdflib import ConjunctiveGraph
 from rdflib import BNode, RDF, URIRef
 from rdflib.term import Identifier
 from rdfalchemy.exceptions import RDFAlchemyError
-from rdfalchemy.Literal import Literal
-import re
-import logging
-console = logging.StreamHandler()
-formatter = logging.Formatter('%(name)-12s: %(levelname)-8s %(message)s')
-console.setFormatter(formatter)
+from rdfalchemy.literal import Literal
 
 log = logging.getLogger(__name__)
-log.setLevel(logging.WARN)
-log.addHandler(console)
 
 re_ns_n = re.compile('(.*[/#])(.*)')
+
 
 # Note: Non data descriptors (get only) lookup in obj.__dict__ first
 #       Data descriptors (get and set) use the __get__ first
@@ -30,26 +28,27 @@ re_ns_n = re.compile('(.*[/#])(.*)')
 # define our Base Class for all "subjects" in python
 #
 
+@total_ordering
+class rdfSubject:
+    """
+    The constructor tries hard to do return you an rdfSubject
 
-class rdfSubject(object):
+    :param resUri: the "resource uri". If `None` then create an instance
+    with a BNode resUri. Can be given as one of:
+
+       * an instance of an rdfSubject
+       * an instance of a BNode or a URIRef
+       * an n3 uriref string like: "<urn:isbn:1234567890>"
+       * an n3 bnode string like: "_:xyz1234"
+    :param kwargs: is a set of values that will be set using the keys to
+    find the appropriate descriptor
+    """
+    # Default graph for access for instances of this type
     db = ConjunctiveGraph()
-    """Default graph for access to instances of this type"""
+    # rdf:type of instances of this class
     rdf_type = None
-    """rdf:type of instances of this class"""
 
     def __init__(self, resUri=None, **kwargs):
-        """The constructor tries hard to do return you an rdfSubject
-
-        :param resUri: the "resource uri". If `None` then create an instance
-        with a BNode resUri. Can be given as one of:
-
-           * an instance of an rdfSubject
-           * an instance of a BNode or a URIRef
-           * an n3 uriref string like: "<urn:isbn:1234567890>"
-           * an n3 bnode string like: "_:xyz1234"
-        :param kwargs: is a set of values that will be set using the keys to
-        find the appropriate descriptor"""
-
         if not resUri:  # create a bnode
             self.resUri = BNode()
             if self.rdf_type:
@@ -57,8 +56,7 @@ class rdfSubject(object):
 
         elif isinstance(resUri, (BNode, URIRef)):  # use the identifier passed
             self.resUri = resUri
-            if self.rdf_type \
-                and not list(self.db.triples(
+            if self.rdf_type and not list(self.db.triples(
                     (self.resUri, RDF.type, self.rdf_type))):
                 self.db.add((self.resUri, RDF.type, self.rdf_type))
 
@@ -66,7 +64,7 @@ class rdfSubject(object):
             self.resUri = resUri.resUri
             self.db = resUri.db
 
-        elif isinstance(resUri, (str, str)):   # create one from a <uri> or
+        elif isinstance(resUri, (str, str)):  # create one from a <uri> or
             if resUri[0] == "<" and resUri[-1] == ">":  # _:bnode string
                 self.resUri = URIRef(resUri[1:-1])
             elif resUri.startswith("_:"):
@@ -83,13 +81,17 @@ class rdfSubject(object):
             self._set_with_dict(kwargs)
 
     def n3(self):
-        """n3 repr of this node"""
+        """
+        n3 repr of this node
+        """
         return self.resUri.n3()
 
     @classmethod
-    def _getdescriptor(cls, key):
-        """__get_descriptor returns the descriptor for the key.
-        It essentially cls.__dict__[key] with recursive calls to super"""
+    def _get_descriptor(cls, key):
+        """
+        _get_descriptor returns the descriptor for the key.
+        It essentially cls.__dict__[key] with recursive calls to super
+        """
         # NOT SURE if mro is the way to do this or if we should call
         # super() or bases?
         for kls in cls.mro():
@@ -106,7 +108,8 @@ class rdfSubject(object):
 
     @classmethod
     def get_by(cls, **kwargs):
-        """Class Method, returns a single instance of the class
+        """
+        Class Method, returns a single instance of the class
         by a single kwarg.  the keyword must be a descriptor of the
         class.
         example:
@@ -117,17 +120,18 @@ class rdfSubject(object):
 
         :Note:
             the keyword should map to an rdf predicate
-            that is of type owl:InverseFunctional"""
+            that is of type owl:InverseFunctional
+        """
         if len(kwargs) != 1:
             raise ValueError(
-                "get_by wanted exactly 1 but got  %i args\n" +
+                "get_by wanted exactly 1 but got  %i args\n"
                 "Maybe you wanted filter_by" % (len(kwargs)))
-        key, value = kwargs.items()[0]
+        key, value = next(iter(kwargs.items()))
         if isinstance(value, (URIRef, BNode, Literal)):
             o = value
         else:
             o = Literal(value)
-        pred = cls._getdescriptor(key).pred
+        pred = cls._get_descriptor(key).pred
         uri = cls.db.value(None, pred, o)
         if uri:
             return cls(uri)
@@ -147,7 +151,7 @@ class rdfSubject(object):
         """
         filters = []
         for key, value in kwargs.items():
-            pred = cls._getdescriptor(key).pred
+            pred = cls._get_descriptor(key).pred
             # try to make the value be OK for the triple query as an object
             if isinstance(value, Identifier):
                 obj = value
@@ -158,32 +162,38 @@ class rdfSubject(object):
         if not (RDF.type, cls.rdf_type) in filters:
             filters.append((RDF.type, cls.rdf_type))
         pred, obj = filters[0]
-        log.debug("Checking %s, %s" % (pred, obj))
+        log.debug("Checking %s, %s", pred, obj)
         for sub in cls.db.subjects(pred, obj):
-            log.debug("maybe %s" % sub)
+            log.debug("maybe %s", sub)
             for pred, obj in filters[1:]:
-                log.debug("Checking %s, %s" % (pred, obj))
+                log.debug("Checking %s, %s", pred, obj)
                 try:
                     cls.db.triples((sub, pred, obj)).next()
                 except:
-                    log.warn("No %s" % sub)
+                    warnings.warn("No %s" % sub)
                     break
             else:
                 yield cls(sub)
 
     @classmethod
     def ClassInstances(cls):
-        """return a generator for instances of this rdf:type
-        you can look in MyClass.rdf_type to see the predicate being used"""
-        beenthere = set([])
+        """
+        return a generator for instances of this rdf:type
+        you can look in MyClass.rdf_type to see the predicate being used
+        """
+        log.info('ClassInstances() IN')
+        been_there = set()
         for i in cls.db.subjects(RDF.type, cls.rdf_type):
-            if not i in beenthere:
+            log.info('ClassInstances: %s, seen: %s', i, i in been_there)
+            if i not in been_there:
                 yield cls(i)
-                beenthere.add(i)
+                been_there.add(i)
 
     @classmethod
     def GetRandom(cls):
-        """for develoment just returns a random instance of this class"""
+        """
+        for develoment just returns a random instance of this class
+        """
         from random import choice
         xii = list(cls.ClassInstances())
         return choice(xii)
@@ -191,22 +201,27 @@ class rdfSubject(object):
     def __hash__(self):
         return hash("ranD0Mi$h_" + self.n3())
 
-    def __cmp__(self, other):
-        if other is None:
+    def __eq__(self, other):
+        if not other:
             return False
-        else:
-            return cmp(self.n3(), other.n3())
+        return self.n3() == other.n3()
+
+    def __lt__(self, other):
+        if not other:
+            return False
+        return self.n3() < other.n3()
+
+    def __gt__(self, other):
+        if not other:
+            return False
+        return self.n3() > other.n3()
 
     def __repr__(self):
         return """%s('%s')""" % (
             self.__class__.__name__, self.n3().encode('utf-8'))
 
-    if rdflibversion.startswith('2'):
-        def __str__(self):
-            return str(self.resUri)
-
     def __getitem__(self, pred):
-        log.debug("Getting with __getitem__ %s for %s" % (pred, self.n3()))
+        log.debug("Getting with __getitem__ %s for %s", pred, self.n3())
         val = self.db.value(self.resUri, pred)
         if isinstance(val, Literal):
             val = val.toPython()
@@ -215,7 +230,7 @@ class rdfSubject(object):
         return val
 
     def __delitem__(self, pred):
-        log.debug("Deleting with __delitem__ %s for %s" % (pred, self))
+        log.debug("Deleting with __delitem__ %s for %s", pred, self)
         for s, p, o in self.db.triples((self.resUri, pred, None)):
             self.db.remove((s, p, o))
             # finally if the object in the triple was a bnode
@@ -233,12 +248,10 @@ class rdfSubject(object):
 
         """
         for key, value in kv.items():
-            descriptor = self.__class__._getdescriptor(key)
+            descriptor = self.__class__._get_descriptor(key)
             descriptor.__set__(self, value)
 
-    def _remove(
-            self, db=None, cascade='bnode',
-            bnodeCheck=True, objectCascade=False):
+    def _remove(self, db=None, cascade='bnode', bnodeCheck=True, objectCascade=False):
         """
         Remove all triples where this rdfSubject is the subject of the triple
 
@@ -261,18 +274,16 @@ class rdfSubject(object):
             * True -- delete also all triples where this refSubject is the
             object of the triple.
         """
-        noderef = self.resUri
-        log.debug("Called remove on %s" % self)
+        node_ref = self.resUri
+        log.debug("Called remove on %s",  self)
         if not db:
             db = self.db
 
         # we cannot delete a bnode if it is still referenced,
         # i.e. if it is the o of a s,p,o
-        if bnodeCheck and isinstance(noderef, BNode):
-            for s, p, o in db.triples((None, None, noderef)):
-                raise RDFAlchemyError(
-                    "Cannot delete BNode %s because %s still references it" % (
-                    noderef.n3(), s.n3()))
+        if bnodeCheck and isinstance(node_ref, BNode):
+            for s, p, o in db.triples((None, None, node_ref)):
+                raise RDFAlchemyError("Cannot delete BNode %s because %s still references it" % (node_ref.n3(), s.n3()))
 
         # determine an appropriate test for cascade decisions
         if cascade == 'bnode':
@@ -284,33 +295,35 @@ class rdfSubject(object):
                     return False
                 return True
         elif cascade == 'none':
-
             def f1(node):
                 return False
+
             test = f1
         elif cascade == 'all':
-
             def f2(node):
                 if isinstance(node, Literal):
                     return False
                 for s, p, o in db.triples((None, None, node)):
                     return False
                 return True
+
             test = f2
         else:
             raise AttributeError("unknown cascade argument")
 
-        for s, p, o in db.triples((noderef, None, None)):
+        for s, p, o in db.triples((node_ref, None, None)):
             db.remove((s, p, o))
             if test(o):
                 rdfSubject(o)._remove(db=db, cascade=cascade)
 
         if objectCascade:
-            for s, p, o in db.triples((None, None, noderef)):
+            for s, p, o in db.triples((None, None, node_ref)):
                 db.remove((s, p, o))
 
     def _rename(self, name, db=None):
-        """rename a node """
+        """
+        rename a node
+        """
         if not db:
             db = self.db
         if not (isinstance(name, (BNode, URIRef))):
@@ -323,12 +336,13 @@ class rdfSubject(object):
         self.resUri = name
 
     def _ppo(self, db=None):
-        """Like pretty print...
+        """
+        Like pretty print...
         Return a 'pretty predicate,object' of self
-        returning all predicate object pairs with qnames"""
+        returning all predicate object pairs with qnames
+        """
         db = db or self.db
         for p, o in db.predicate_objects(self.resUri):
             print("%20s = %s" % (db.qname(p), str(o)))
             # print "%20s = %s" % (db.qname(p), str(o))
         print(" ")
-

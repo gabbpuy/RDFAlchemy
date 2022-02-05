@@ -1,10 +1,10 @@
 """
 
 """
+import cgi
 import os
 import re
-import cgi
-import urllib
+import urllib.parse
 
 
 def create_engine(url='', identifier="", create=False):
@@ -25,7 +25,7 @@ def create_engine(url='', identifier="", create=False):
     for zodb:
 
     the key in the Zope database is hardcoded as 'rdflib', urls ending in `.fs`
-    indicate FileStorage, otherwise ClientStoreage is assumed which requires
+    indicate FileStorage, otherwise ClientStorage is assumed which requires
     a ZEO Server to be running
 
     for sqlalchemy, prepend the string "sqlachemy+" to a valid SQLAlchemy dburi
@@ -37,7 +37,7 @@ def create_engine(url='', identifier="", create=False):
       - create_engine('sqlalchemy+postgresql://myname@localhost/rdflibdb')
 
     etc.
-
+    :param create: ...
     """
     if url == '' or url.startswith('IOMemory'):
         from rdflib import ConjunctiveGraph
@@ -60,32 +60,6 @@ def create_engine(url='', identifier="", create=False):
         db = ConjunctiveGraph('SQLAlchemy', identifier=identifier)
         db.open(url[11:], create=create)
 
-    elif url.lower().startswith('zodb://'):
-        import ZODB
-        # import transaction
-        from rdflib import ConjunctiveGraph
-        db = ConjunctiveGraph('ZODB')
-        if url.endswith('.fs'):
-            from ZODB.FileStorage import FileStorage
-            openstr = os.path.abspath(os.path.expanduser(url[7:]))
-            if not os.path.exists(openstr) and not create:
-                raise("File not found: %s" % openstr)
-            fs = FileStorage(openstr)
-        else:
-            from ZEO.ClientStorage import ClientStorage
-            schema, opts = _parse_rfc1738_args(url)
-            fs = ClientStorage((opts['host'], int(opts['port'])))
-        # get the Zope Database
-        zdb = ZODB.DB(fs)
-        # open it
-        conn = zdb.open()
-        #get the root
-        root = conn.root()
-        # get the Conjunctive Graph
-        if 'rdflib' not in root and create:
-            root['rdflib'] = ConjunctiveGraph('ZODB')
-        db = root['rdflib']
-
     elif url.lower().startswith('sesame://'):
         from rdfalchemy.sparql.sesame2 import SesameGraph
         db = SesameGraph("http://" + url[9:])
@@ -100,14 +74,13 @@ def create_engine(url='', identifier="", create=False):
 
 
 def engine_from_config(configuration, prefix='rdfalchemy.', **kwargs):
-    """Create a new Engine instance using a configuration dictionary.
+    """
+    Create a new Engine instance using a configuration dictionary.
 
     :param configuration: a dictionary, typically produced from a config file
         where keys are prefixed, such as `rdfalchemy.dburi`, etc.
     :param prefix: indicates the prefix to be searched for.
-
     """
-
     options = dict(
         [(key[len(prefix):], configuration[key])
             for key in configuration if key.startswith(prefix)])
@@ -118,8 +91,10 @@ def engine_from_config(configuration, prefix='rdfalchemy.', **kwargs):
 
 
 def _parse_rfc1738_args(name):
-    """ parse url str into options
-    code orig from sqlalchemy.engine.url """
+    """
+    parse url str into options
+    code orig from sqlalchemy.engine.url
+    """
     pattern = re.compile(r'''
             (\w+)://
             (?:
@@ -135,8 +110,7 @@ def _parse_rfc1738_args(name):
 
     m = pattern.match(name)
     if m is not None:
-        (name, username, password, host, port, database) = m.group(
-            1, 2, 3, 4, 5, 6)
+        name, username, password, host, port, database = m.group(1, 2, 3, 4, 5, 6)
         if database is not None:
             tokens = database.split(r"?", 2)
             database = tokens[0]
@@ -151,7 +125,7 @@ def _parse_rfc1738_args(name):
             'username': username, 'password': password, 'host': host,
             'port': port, 'database': database, 'query': query}
         if opts['password'] is not None:
-            opts['password'] = urllib.unquote_plus(opts['password'])
-        return (name, opts)
+            opts['password'] = urllib.parse.unquote_plus(opts['password'])
+        return name, opts
     else:
         raise ValueError("Could not parse rfc1738 URL from string '%s'" % name)

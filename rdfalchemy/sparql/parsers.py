@@ -1,50 +1,20 @@
+from io import TextIOWrapper
+import json
+import logging
+from struct import unpack
+from urllib.request import urlopen, Request
+
+import lxml.etree as ET  # ElementTree API using libxml2
 from rdflib import URIRef, Literal, BNode
 
-from urllib2 import urlopen, Request  # , HTTPError
-from struct import unpack
-
-from rdfalchemy.exceptions import (
-    MalformedQueryError,
-    QueryEvaluationError,
-    ParseError
-)
-
-try:
-    from rdflib.py3compat import b
-except:
-    from six import b
-
-try:
-    import json
-    assert json
-except ImportError:
-    import simplejson as json
-import logging
+from rdfalchemy.exceptions import MalformedQueryError, QueryEvaluationError, ParseError
 
 __all__ = ["_JSONSPARQLHandler", "_XMLSPARQLHandler", "_BRTRSPARQLHandler"]
 
 log = logging.getLogger(__name__)
 
-# use a fast ElementTree
-# TODO: test these each for iterparse compatability and relative speed
-try:
-    import cElementTree as ET  # effbot's C module
-    assert ET
-except ImportError:
-    try:
-        import xml.etree.ElementTree as ET  # in python >=2.5
-        assert ET
-    except ImportError:
-        try:
-            import lxml.etree as ET  # ElementTree API using libxml2
-            assert ET
-        except ImportError:
-            import elementtree.ElementTree as ET  # effbot's pure Python module
-            assert ET
-log.debug('Using ElementTree: %s' % ET)
 
-
-class _SPARQLHandler(object):
+class _SPARQLHandler:
 
     """
     Abstract base class for parsing the response stream of a sparql query
@@ -76,14 +46,9 @@ class _JSONSPARQLHandler(_SPARQLHandler):
     mimetype = 'application/sparql-results+json'
 
     def parse(self):
-        import sys
-        if sys.version_info[0] > 2:
-            from io import TextIOWrapper
-            ret = json.load(
-                TextIOWrapper(self.stream),
-                encoding=self.stream.info().get_content_charset('utf8'))
-        else:
-            ret = json.load(self.stream)
+        ret = json.load(
+            TextIOWrapper(self.stream),
+            encoding=self.stream.info().get_content_charset('utf8'))
         var_names = ret['head']['vars']
         bindings = ret['results']['bindings']
         for bdg in bindings:
@@ -96,8 +61,7 @@ class _JSONSPARQLHandler(_SPARQLHandler):
                 elif type == 'literal':
                     bdg[var] = Literal(val['value'], lang=val.get('xml:lang'))
                 elif type == 'typed-literal':
-                    bdg[var] = Literal(val[
-                                       'value'], datatype=val.get('datatype'))
+                    bdg[var] = Literal(val['value'], datatype=val.get('datatype'))
                 else:
                     raise AttributeError("Binding type error: %s" % (type))
             yield tuple([bdg.get(var) for var in var_names])
@@ -161,38 +125,38 @@ class _XMLSPARQLHandler(_SPARQLHandler):
 
 class _BRTRSPARQLHandler(_SPARQLHandler):
 
-    """Handler for the sesame binary table format BRTR_
+    """
+    Handler for the sesame binary table format BRTR_
 
     .. _BRTR: http://www.openrdf.org/doc/sesame/api/org/openrdf
     /sesame/query/BinaryTableResultConstants.html
     """
-
     mimetype = "application/x-binary-rdf-results-table"
 
-    def readint(self):
+    def read_int(self):
         return unpack('>i', self.stream.read(4))[0]
 
-    def readstr(self):
-        l = self.readint()
-        return self.stream.read(l).decode("utf-8")
+    def read_str(self):
+        line = self.read_int()
+        return self.stream.read(line).decode("utf-8")
 
     def parse(self):
-        if self.stream.read(4) != b('BRTR'):
+        if self.stream.read(4) != b'BRTR':
             raise ParseError("First 4 bytes in should be BRTR")
-        self.ver = self.readint()  # ver of protocol
-        self.ncols = self.readint()
-        self.keys = tuple(self.readstr() for x in range(self.ncols))
+        self.ver = self.read_int()  # ver of protocol
+        self.ncols = self.read_int()
+        self.keys = tuple(self.read_str() for x in range(self.ncols))
         self.values = [None, ] * self.ncols
         self.ns = {}
         while True:
             for i in range(self.ncols):
-                val = self.getval()
-                if val is 1:  # REPEAT here is like skip..
+                val = self.get_val()
+                if val == 1:  # REPEAT here is like skip..
                     continue  # the val is already in self.values[i]
                 self.values[i] = val
             yield tuple(self.values)
 
-    def getval(self):
+    def get_val(self):
         while True:
             rtype = ord(self.stream.read(1))
             if rtype == 0:  # NULL
@@ -200,30 +164,30 @@ class _BRTRSPARQLHandler(_SPARQLHandler):
             elif rtype == 1:  # REPEAT
                 return 1
             elif rtype == 2:  # NAMESPACE
-                nsid = self.readint()
-                url = self.readstr()
+                nsid = self.read_int()
+                url = self.read_str()
                 self.ns[nsid] = url
             elif rtype == 3:  # QNAME
-                nsid = self.readint()
-                localname = self.readstr()
+                nsid = self.read_int()
+                localname = self.read_str()
                 return URIRef(self.ns[nsid] + localname)
             elif rtype == 4:  # URI
-                return URIRef(self.readstr())
+                return URIRef(self.read_str())
             elif rtype == 5:  # BNODE
-                return BNode(self.readstr())
+                return BNode(self.read_str())
             elif rtype == 6:  # PLAIN LITERAL
-                return Literal(self.readstr())
+                return Literal(self.read_str())
             elif rtype == 7:  # LANGUAGE LITERAL
-                lit = self.readstr()
-                lang = self.readstr()
+                lit = self.read_str()
+                lang = self.read_str()
                 return Literal(lit, lang=lang)
             elif rtype == 8:  # DATATYPE LITERAL
-                lit = self.readstr()
-                datatype = self.getval()
+                lit = self.read_str()
+                datatype = self.get_val()
                 return Literal(lit, datatype=datatype)
             elif rtype == 126:  # ERROR
                 errType = ord(self.stream.read(1))
-                errStr = self.readstr()
+                errStr = self.read_str()
                 if errType == 1:
                     raise MalformedQueryError(errStr)
                 elif errType == 2:

@@ -5,38 +5,33 @@ descriptors.py
 Created by Philip Cooper on 2008-02-03.
 Copyright (c) 2008 Openvest. All rights reserved.
 """
+from copy import copy
+import logging
+import warnings
 
-from rdflib import URIRef, BNode, Namespace
+from rdflib import URIRef, BNode
 from rdflib.term import Identifier
 from rdfalchemy import rdfSubject, Literal
-from copy import copy
 
-import logging
+from rdfalchemy.namespaces import RDF
 
-__all__ = [
-    "rdfSingle", "rdfMultiple", "rdfList", "rdfContainer", "owlTransitive"]
+__all__ = ["rdfSingle", "rdfMultiple", "rdfList", "rdfContainer", "owlTransitive", "rdfAbstract"]
 
-console = logging.StreamHandler()
-formatter = logging.Formatter('%(name)-12s: %(levelname)-8s %(message)s')
-console.setFormatter(formatter)
 log = logging.getLogger(__name__)
-log.setLevel(logging.WARN)
-log.addHandler(console)
-
-# need the RDF['_%d'%i] ability
-RDF = Namespace(
-    "http://www.w3.org/1999/02/22-rdf-syntax-ns#")
 
 
 # helper function, might be somewhere in rdflib I need to look for it there
-def getList(sub, pred=None, db=None):
-    """Attempts to return a list from sub (subject that is)
-    passed in if it is a Collection or a Container (Bag,Seq or Alt)"""
+def get_list(sub, pred=None, db=None):
+    """
+    Attempts to return a items from sub (subject that is)
+    passed in if it is a Collection or a Container (Bag,Seq or Alt)
+    """
     if not db:
         if isinstance(sub, rdfSubject):
             db = sub.db
         else:
             db = rdfSubject.db
+
     if isinstance(sub, rdfSubject):
         sub = sub.resUri
     if pred:
@@ -45,13 +40,13 @@ def getList(sub, pred=None, db=None):
         # if there was no predicate assume a base node was passed in
         base = sub
     if not isinstance(base, BNode):
-        # Doesn't look like a list or a collection, just return
+        # Doesn't look like a items or a collection, just return
         # multiple values (or an error?)
         val = [o for o in db.objects(sub, pred)]
         return val
     members = []
     first = db.value(base, RDF.first)
-    # OK let's work at returning a list if there is an RDF.first
+    # OK let's work at returning a items if there is an RDF.first
     if first:
         while first:
             members.append(first)
@@ -65,7 +60,7 @@ def getList(sub, pred=None, db=None):
         first = db.value(base, RDF._1)
         if not first:
             raise AttributeError(
-                "Not a list, or collection but another type of BNode")
+                "Not a items, or collection but another type of BNode")
         while first:
             members.append(first)
             i += 1
@@ -92,12 +87,13 @@ def value2object(value):
 #
 
 
-class rdfAbstract(object):
-
-    """Abstract base class for descriptors
+class rdfAbstract:
+    """
+    Abstract base class for descriptors
     Descriptors are to map class instance variables to predicates
     optional cacheName is where to store items
-    range_type is the rdf:type of the range of this predicate"""
+    range_type is the rdf:type of the range of this predicate
+    """
     def __init__(self, pred, cacheName=None, range_type=None):
         self.pred = pred
         self.name = cacheName or pred
@@ -113,7 +109,7 @@ class rdfAbstract(object):
             try:
                 return self._mappedClass
             except AttributeError:
-                log.warn(
+                warnings.warn(
                     "Descriptor %s has range of: %s but not yet mapped" % (
                         self, self.range_type))
                 return rdfSubject
@@ -128,7 +124,7 @@ class rdfAbstract(object):
           then cascade the delete if that BNode has no further references to it
           i.e. it is not the object in any other triples.
         """
-        # be done ala getList above
+        # be done ala get_list above
         log.debug("DELETE with descriptor for %s on %s" % (
             self.pred, obj.n3()))
         # first drop the cached value
@@ -139,21 +135,22 @@ class rdfAbstract(object):
 
 
 class rdfSingle(rdfAbstract):
-
-    '''This is a Descriptor
+    """
+    This is a Descriptor
     Takes a the URI of the predicate at initialization
     Expects to return a single item
     on Assignment will set that value to the
-    ONLY triple with that subject,predicate pair'''
+    ONLY triple with that subject,predicate pair
+    """
     def __init__(self, pred, cacheName=None, range_type=None):
-        super(rdfSingle, self).__init__(pred, cacheName, range_type)
+        super().__init__(pred, cacheName, range_type)
 
     def __get__(self, obj, cls):
         if obj is None:
             return self
         if self.name in obj.__dict__:
             return obj.__dict__[self.name]
-        log.debug("Getting with descriptor %s for %s" % (self.pred, obj.n3()))
+        log.debug("Getting with descriptor %s for %s", self.pred, obj.n3())
         val = obj.__getitem__(self.pred)
         if isinstance(val, (rdfSubject, BNode, URIRef)):
             val = self.range_class(val)
@@ -161,12 +158,10 @@ class rdfSingle(rdfAbstract):
         return val
 
     def __set__(self, obj, value):
-        log.debug(
-            "SET with descriptor value %s of type %s" % (value, type(value)))
-        # setattr(obj, self.name, value)  #this recurses indefinatly
+        log.debug("SET with descriptor value %s of type %s", value, type(value))
+        # setattr(obj, self.name, value)  #this recurses indefinitely
         if isinstance(value, (list, tuple, set)):
-            raise AttributeError(
-                "to set an rdfSingle you must pass in a single value")
+            raise AttributeError("to set an rdfSingle you must pass in a single value")
         if value is None:
             self.__delete__(obj)
         else:
@@ -176,11 +171,12 @@ class rdfSingle(rdfAbstract):
 
 
 class rdfMultiple(rdfAbstract):
-
-    '''This is a Descriptor
-       Expects to return a list of values (could be a list of one)'''
+    """
+    This is a Descriptor
+    Expects to return a items of values (could be a items of one)
+    """
     def __init__(self, pred, cacheName=None, range_type=None):
-        super(rdfMultiple, self).__init__(pred, cacheName, range_type)
+        super().__init__(pred, cacheName, range_type)
 
     def __get__(self, obj, cls):
         if obj is None:
@@ -188,16 +184,16 @@ class rdfMultiple(rdfAbstract):
         if self.name in obj.__dict__:
             return obj.__dict__[self.name]
         val = [o for o in obj.db.objects(obj.resUri, self.pred)]
-        log.debug("Getting with descriptor %s for %s" % (self.pred, obj.n3()))
+        log.debug("Getting with descriptor %s for %s", self.pred, obj.n3())
         # check to see if this is a Container or Collection
-        # if so, return collection as a list
+        # if so, return collection as a items
         if (len(val) == 1
             ) and (
                 not isinstance(val[0], Literal)
             ) and (
                 obj.db.value(val[0], RDF.first
                              ) or obj.db.value(val[0], RDF._1)):
-            val = getList(obj, self.pred)
+            val = get_list(obj, self.pred)
         val = [(isinstance(v, (BNode, URIRef))
                 and self.range_class(v)
                 or v.toPython())
@@ -206,61 +202,56 @@ class rdfMultiple(rdfAbstract):
         return val
 
     def __set__(self, obj, newvals):
-        log.debug(
-            "SET with descriptor value %s of type %s" % (
-                newvals, type(newvals)))
+        log.debug("SET with descriptor value %s of type %s", newvals, type(newvals))
         if not isinstance(newvals, (list, tuple)):
             raise AttributeError(
                 "to set a rdfMultiple you must pass in " +
-                "a list (it can be a list of one)")
+                "a items (it can be a items of one)")
         if newvals is None:
             self.__delete__(obj)
             return
         try:
-            oldvals = obj.__dict__[self.name]
+            old_vals = obj.__dict__[self.name]
         except KeyError:
-            oldvals = []
-            obj.__dict__[self.name] = oldvals
-        for value in oldvals:
+            old_vals = []
+            obj.__dict__[self.name] = old_vals
+        for value in old_vals:
             if value not in newvals:
                 obj.db.remove((obj.resUri, self.pred, value2object(value)))
-                log.debug("removing: %s, %s, %s" % (
-                    obj.n3(), self.pred, value))
+                log.debug("removing: %s, %s, %s", obj.n3(), self.pred, value)
         for value in newvals:
-            if value not in oldvals:
+            if value not in old_vals:
                 obj.db.add((obj.resUri, self.pred, value2object(value)))
-                log.debug("adding: %s, %s, %s" % (
-                    obj.n3(), self.pred, value))
+                log.debug("adding: %s, %s, %s", obj.n3(), self.pred, value)
         obj.__dict__[self.name] = copy(newvals)
 
 
 class rdfBest(rdfSingle):
-
-    '''This is a Descriptor  that returns one value that is the
+    """
+    This is a Descriptor  that returns one value that is the
     "best" result out of possible multiple matches
 
     returns a single value or None
 
     It is the responsibility of the select_fun to return a default
-    like choices[0] if no "Best" is found'''
+    like choices[0] if no "Best" is found
+    """
 
     def __init__(self, pred, select_fun=None, cacheName=None, range_type=None):
         if select_fun:
             self.select_fun = select_fun
-        super(rdfMultiple, self).__init__(pred, range_type)
+        super().__init__(pred, range_type)
 
     def __get__(self, obj, cls):
         if obj is None:
             return self
         if self.name in obj.__dict__:
             return obj.__dict__[self.name]
-        log.debug("Getting with descriptor %s for %s" % (self.pred, obj.n3()))
+        log.debug("Getting with descriptor %s for %s", self.pred, obj.n3())
         vals = [o for o in obj.db.objects(obj.resUri, self.pred)]
         if vals:
             val = self.select_fun(vals)
-            val = isinstance(val, (BNode, URIRef)) \
-                and self.range_class(val) \
-                or val.toPython()
+            val = isinstance(val, (BNode, URIRef)) and self.range_class(val) or val.toPython()
         else:
             val = None
         obj.__dict__[self.name] = val
@@ -268,14 +259,15 @@ class rdfBest(rdfSingle):
 
 
 class rdfLocale(rdfBest):
-
-    '''This is like rdfBest with a predefined select_fun to select
+    """
+    This is like rdfBest with a predefined select_fun to select
     from multiple choices like labels or comments and select the one
-    with the correct locale'''
+    with the correct locale
+    """
     def __init__(self, pred, lang, cacheName=None):
         self.lang = lang
         cacheNameLang = cacheName or ("%s@%s" % (pred, lang))
-        super(rdfBest, self).__init__(pred, cacheName=cacheNameLang)
+        super().__init__(pred, cacheName=cacheNameLang)
 
     def select_fun(self, choices):
         for x in choices:
@@ -285,13 +277,14 @@ class rdfLocale(rdfBest):
 
 
 class rdfList(rdfMultiple):
-
-    '''This is a Descriptor
-       Expects to return a list of values (could be a list of one)
-       `__set__` will set the predicate as a RDF List'''
+    """
+    This is a Descriptor
+    Expects to return a items of values (could be a items of one)
+    `__set__` will set the predicate as a RDF List
+    """
 
     def __init__(self, pred, cacheName=None, range_type=None):
-        super(rdfMultiple, self).__init__(pred, cacheName, range_type)
+        super().__init__(pred, cacheName, range_type)
 
     def __get__(self, obj, cls):
         if obj is None:
@@ -300,16 +293,16 @@ class rdfList(rdfMultiple):
             return obj.__dict__[self.name]
         # log.debug("Geting %s for %s" % (
         #    obj.db.qname(self.pred),obj.db.qname(obj.resUri)))
-        log.debug("Getting %s for %s" % (self.pred, obj.n3()))
+        log.debug("Getting %s for %s",  self.pred, obj.n3())
         base = obj.db.value(obj.resUri, self.pred)
         if not base or base == RDF.nil:
             return []
         members = []
         first = obj.db.value(base, RDF.first)
-        # OK let's work at returning a list if there is an RDF.first
+        # OK let's work at returning a items if there is an RDF.first
         if not first:
             raise AttributeError(
-                "expected node [%s] to be a list but it's not" % base.n3())
+                "expected node [%s] to be a items but it's not" % base.n3())
         while first:
             members.append(first)
             base = obj.db.value(base, RDF.rest)
@@ -325,20 +318,18 @@ class rdfList(rdfMultiple):
         return val
 
     def __set__(self, obj, newvals):
-        log.debug(
-            "SET with descriptor value %s of type %s" % (
-                newvals, type(newvals)))
+        log.debug("SET with descriptor value %s of type %s", newvals, type(newvals))
         if not isinstance(newvals, (list, tuple)):
             raise AttributeError(
                 "to set a rdfList you must pass in a " +
-                "list (it can be a list of one)")
+                "items (it can be a items of one)")
         try:
-            oldvals = obj.__dict__[self.name]
+            old_vals = obj.__dict__[self.name]
         except KeyError:
-            oldvals = []
-            obj.__dict__[self.name] = oldvals
-        oldhead = obj.db.value(obj.resUri, self.pred)
-        # This is a stack style where retrevial is oppisite of how
+            old_vals = []
+            obj.__dict__[self.name] = old_vals
+        old_head = obj.db.value(obj.resUri, self.pred)
+        # This is a stack style where retrieval is opposite of how
         # it starts out
         # newnode = RDF.nil
         # for value in newvals:
@@ -347,29 +338,28 @@ class rdfList(rdfMultiple):
         #     obj.db.add((newnode, RDF.first, value2object(value)))
         #     obj.db.add((newnode, RDF.rest, almostnewnode))
         if not newvals:
-            newhead = RDF.nil
+            new_head = RDF.nil
         else:
-            newhead = BNode()
-            newtail = newhead
-            oldtail = None
+            new_head = BNode()
+            new_tail = new_head
+            old_tail = None
             for value in newvals:
-                if oldtail:
-                    obj.db.add((oldtail, RDF.rest, newtail))
-                obj.db.add((newtail, RDF.first, value2object(value)))
-                oldtail = newtail
-                newtail = BNode()
-            obj.db.add((oldtail, RDF.rest, RDF.nil))
-        obj.db.set((obj.resUri, self.pred, newhead))
-        if oldhead:
-            rdfSubject(oldhead)._remove(db=obj.db)
+                if old_tail:
+                    obj.db.add((old_tail, RDF.rest, new_tail))
+                obj.db.add((new_tail, RDF.first, value2object(value)))
+                old_tail = new_tail
+                new_tail = BNode()
+            obj.db.add((old_tail, RDF.rest, RDF.nil))
+        obj.db.set((obj.resUri, self.pred, new_head))
+        if old_head:
+            rdfSubject(old_head)._remove(db=obj.db)
         obj.__dict__[self.name] = copy(newvals)
 
 
 class rdfContainer(rdfMultiple):
-
     """
     This is a Descriptor
-    Expects to return a list of values (could be a list of one)
+    Expects to return a items of values (could be a items of one)
 
     container_type in `__init__` should be one of
 
@@ -381,10 +371,8 @@ class rdfContainer(rdfMultiple):
     (defaults to rdf:Seq)
     """
 
-    def __init__(
-            self, pred,  range_type=None,
-            container_type="http://www.w3.org/1999/02/22-rdf-syntax-ns#Seq"):
-        super(rdfMultiple, self).__init__(pred,  range_type=range_type)
+    def __init__(self, pred,  range_type=None, container_type="http://www.w3.org/1999/02/22-rdf-syntax-ns#Seq"):
+        super().__init__(pred,  range_type=range_type)
         self.container_type = container_type
 
     def __get__(self, obj, cls):
@@ -394,7 +382,7 @@ class rdfContainer(rdfMultiple):
             return obj.__dict__[self.name]
         # log.debug("Geting %s for %s" % (
         #    obj.db.qname(self.pred),obj.db.qname(obj.resUri)))
-        log.debug("Getting %s for %s" % (self.pred, obj.n3()))
+        log.debug("Getting %s for %s", self.pred, obj.n3())
         base = obj.db.value(obj.resUri, self.pred)
         if not base:
             return []
@@ -402,8 +390,7 @@ class rdfContainer(rdfMultiple):
         i = 1
         first = obj.db.value(base, RDF._1)
         if not first:
-            raise AttributeError(
-                "expected node [%s] to be a list but it's not" % base.n3())
+            raise AttributeError("expected node [%s] to be a items but it's not" % base.n3())
         while first:
             members.append(first)
             i += 1
@@ -416,13 +403,12 @@ class rdfContainer(rdfMultiple):
         obj.__dict__[self.name] = val
         return val
 
-    def __set__(self, obj, newvals):
-        log.debug("SET with descriptor value %s of type %s" % (
-            newvals, type(newvals)))
-        if not isinstance(newvals, (list, tuple)):
+    def __set__(self, obj, new_vals):
+        log.debug("SET with descriptor value %s of type %s", new_vals, type(new_vals))
+        if not isinstance(new_vals, (list, tuple)):
             raise AttributeError(
-                "to set a rdfList you must pass in" +
-                " a list (it can be a list of one)")
+                "to set a rdfList you must pass in"
+                " a items (it can be a items of one)")
         seq = obj.db.value(obj.resUri, self.pred)
         if not seq:
             seq = BNode()
@@ -431,19 +417,19 @@ class rdfContainer(rdfMultiple):
         for s, p, o in obj.db.triples((seq, None, None)):
             if p.startswith(RDF['_']):
                 obj.db.remove((s, p, o))
-                if isinstance(o, BNode) and o not in newvals:
+                if isinstance(o, BNode) and o not in new_vals:
                     rdfSubject(o)._remove(db=obj.db)
-        for i in range(len(newvals)):
-            obj.db.add((seq, RDF['_%i' % (i + 1)], value2object(newvals[i])))
-        obj.__dict__[self.name] = copy(newvals)
+        for i in range(len(new_vals)):
+            obj.db.add((seq, RDF['_%i' % (i + 1)], value2object(new_vals[i])))
+        obj.__dict__[self.name] = copy(new_vals)
 
 
 #
 # More owl-ish and rdfs-ish descriptors
 
 class owlTransitive(rdfMultiple):
-
-    """owlTransitive is a descriptor based on a transitive predicate
+    """
+    owlTransitive is a descriptor based on a transitive predicate
     The predicate should be of type owl:TransitiveProperty
     """
 
@@ -452,7 +438,7 @@ class owlTransitive(rdfMultiple):
             return self
         if self.name in obj.__dict__:
             return obj.__dict__[self.name]
-        log.debug("Getting with descriptor %s for %s" % (self.pred, obj.n3()))
+        log.debug("Getting with descriptor %s for %s", self.pred, obj.n3())
         val = [self.range_class(o)
                for o in obj.db.transitive_objects(obj.resUri, self.pred)]
         obj.__dict__[self.name] = val

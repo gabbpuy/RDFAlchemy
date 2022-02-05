@@ -7,4 +7,3 @@ RDFAlchemy is an abstraction layer, allowing Python developers to use familiar
 See the the homepage at http://www.openvest.com/trac/wiki/RDFAlchemy,
 and the docs at http://rdfalchemy.readthedocs.org/ for details.
 
-[![Build Status](https://travis-ci.org/gjhiggins/RDFAlchemy.png?branch=master)](https://travis-ci.org/gjhiggins/RDFAlchemy)

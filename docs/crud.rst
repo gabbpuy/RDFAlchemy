@@ -10,10 +10,10 @@ Create
 .. code-block:: python
 
     class Person(rdfSubject):
-    	    rdf_type = FOAF.Person
-    	    first = rdfSingle(FOAF.givenname)
-    	    last = rdfSingle(FOAF.surname)
-    	
+        rdf_type = FOAF.Person
+        first = rdfSingle(FOAF.givenname)
+        last = rdfSingle(FOAF.surname)
+
     p1 = Person() # creates a bnode with an `foaf:Person <rdf:type>`_ triple
     p2 = Person('<http://www.openvest.com/user/phil>') #creates a URIRef with the same triple
     p3 = Person(last="Cooper",first="Philip") #creates a bnode with 3 triples (rdf:type FOAF:surname FOAF:givenname)

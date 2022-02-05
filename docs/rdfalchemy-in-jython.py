@@ -17,7 +17,7 @@ johnSmith.addProperty(VCARD.FN, fullName
                 ).addProperty(VCARD.Given, givenName
                         ).addProperty(VCARD.Family, familyName))
 
-# list the statements in the graph
+# items the statements in the graph
 iter_ = model.listStatements()
 
 # print out the predicate, subject and object of each statement

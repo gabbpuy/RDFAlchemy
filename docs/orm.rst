@@ -115,7 +115,7 @@ Mapper
 ======
 
 .. autofunction:: rdfalchemy.orm.mapper
-.. autofunction:: rdfalchemy.orm.allsub
+.. autofunction:: rdfalchemy.orm.all_sub
 
 Hybrid SQL/RDF Alchemy Objects
 ==============================

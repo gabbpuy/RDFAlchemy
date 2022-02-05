@@ -1,69 +1,18 @@
 #!/usr/bin/env python
-import sys
-import re
+from setuptools import setup
 
+from rdfalchemy import __version__
+install_requires = [
+    'rdflib>=6.1.0',
+    'SPARQLWrapper>=1.8.5',
+    'wheel>=0.37.1',
+    'lxml >= 4.7.1',
+]
 
-def setup_python3():
-    # Taken from "distribute" setup.py
-    from distutils.filelist import FileList
-    from distutils import dir_util, file_util, util, log
-    from os.path import join, exists
+setup_requires = [
+    'setuptools~=57.0.0'
+]
 
-    tmp_src = join("build", "src")
-    if exists(tmp_src):
-        dir_util.remove_tree(tmp_src)
-    log.set_verbosity(1)
-    fl = FileList()
-    for line in open("MANIFEST.in"):
-        if not line.strip():
-            continue
-        fl.process_template_line(line)
-    dir_util.create_tree(tmp_src, fl.files)
-    outfiles_2to3 = []
-    for f in fl.files:
-        outf, copied = file_util.copy_file(f, join(tmp_src, f), update=1)
-        if copied and outf.endswith(".py"):
-            outfiles_2to3.append(outf)
-
-    util.run_2to3(outfiles_2to3)
-
-    # arrange setup to use the copy
-    sys.path.insert(0, tmp_src)
-
-    return tmp_src
-
-kwargs = {}
-if sys.version_info[0] >= 3:
-    from setuptools import setup as setup_1
-    kwargs['use_2to3'] = True
-    kwargs['src_root'] = setup_python3()
-    setup = setup_1
-else:
-    try:
-        from setuptools import setup as setup_2
-        kwargs['test_suite'] = "nose.collector"
-        setup = setup_2
-    except ImportError:
-        try:
-            from ez_setup import use_setuptools
-            use_setuptools()
-            from setuptools import setup as setup_3
-            setup = setup_3
-        except ImportError:
-            from distutils.core import setup as setup_4
-            setup = setup_4
-
-
-# Find version. We have to do this because we can't import it in Python 3 until
-# its been automatically converted in the setup process.
-def find_version(filename):
-    _version_re = re.compile(r'__version__ = "(.*)"')
-    for line in open(filename):
-        version_match = _version_re.match(line)
-        if version_match:
-            return version_match.group(1)
-
-__version__ = find_version('rdfalchemy/__init__.py')
 
 setup(
     name='RDFAlchemy',
@@ -76,7 +25,7 @@ setup(
     url="http://www.openvest.com/trac/wiki/RDFAlchemy",
     download_url="https://github.com/gjhiggins/RDFAlchemy-%s.tar.gz" % (
         __version__),
-    install_requires=["rdflib>=4.0.1"],
+    install_requires=install_requires,
     packages=['rdfalchemy',
               'rdfalchemy/engine',
               'rdfalchemy/samples',
@@ -87,7 +36,7 @@ setup(
     entry_points={
         'console_scripts': [
             'sparql = rdfalchemy.sparql.script:main',
-            ],
+        ],
     },
     platforms=["any"],
     classifiers=[
@@ -96,7 +45,7 @@ setup(
         "Topic :: Software Development :: Libraries :: Python Modules",
         "Operating System :: OS Independent",
         "Natural Language :: English",
-   ],
+    ],
     long_description="""RDFAlchemy is an abstraction layer that allowS Python
 developers to use familiar *dot notation* to access and update an RDF
 triplestore.
@@ -131,5 +80,6 @@ Includes advanced descriptors for read/write access to lists and collections.
 .. _rdflib: https://github.com/RDFLib/rdflib
 .. _Sesame: http://www.openrdf.org
 .. _SPARQL: http://www.w3.org/TR/rdf-sparql-query/
-    """
+    """,
+    setup_requires=setup_requires
 )

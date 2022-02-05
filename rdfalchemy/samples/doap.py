@@ -1,15 +1,11 @@
 import os
 from rdfalchemy import rdfSingle, rdfMultiple
-from rdfalchemy.rdfSubject import rdfSubject
+from rdfalchemy.namespaces import DOAP, FOAF
+from rdfalchemy.rdf_subject import rdfSubject
 from rdfalchemy.orm import mapper
-from rdflib import Namespace
-
 from rdfalchemy.samples.foaf import Person
 
 non_core = True
-
-DOAP = Namespace("http://usefulinc.com/ns/doap#")
-FOAF = Namespace("http://xmlns.com/foaf/0.1/")
 
 
 class Project(rdfSubject):

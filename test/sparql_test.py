@@ -1,4 +1,4 @@
-# encoding: utf-8
+# -*- encoding: utf-8 -*-
 """
 sparql_test.py
 
@@ -22,7 +22,7 @@ class sparql_testTests(unittest.TestCase):
     def setUp(self):
         pass
 
-    def initBindings_test1(self):
+    def test_initBindings(self):
         query = 'select * where {?s ?P ?oo.?ss ?p \n?oo}'
         initBindings = dict(oo=URIRef("OHO"), P=Decimal("4.40"))
         processed = SPARQLGraph._processInitBindings(query, initBindings)
@@ -30,7 +30,7 @@ class sparql_testTests(unittest.TestCase):
             'select * where {?s "4.40"^^' + \
             '<http://www.w3.org/2001/XMLSchema#decimal> <OHO>.?ss ?p \n<OHO>}'
 
-    def initBindings_test2(self):
+    def test_initBindings_2(self):
         query = 'select * where {?s ?P ?oo.?ss ?p \n?oo}'
         initBindings = dict(oo=URIRef("OHO"), P=Decimal("4.40"))
         processed = SesameGraph._processInitBindings(query, initBindings)
@@ -38,13 +38,13 @@ class sparql_testTests(unittest.TestCase):
             'select * where {?s "4.40"^^' + \
             '<http://www.w3.org/2001/XMLSchema#decimal> <OHO>.?ss ?p \n<OHO>}'
 
-    def sesame_is_sparql_test(self):
-        url = 'http://dbpedia.org/sparql'
+    def test_sesame_is_sparql(self):
+        url = 'https://dbpedia.org/sparql'
         g1 = SesameGraph(url)
         g2 = SPARQLGraph(url)
         q1 = "select distinct ?Concept where {[] a ?Concept} LIMIT 10"
-        r1 = set(list(g1.query(q1, resultMethod='xml')))
-        r2 = set(list(g2.query(q1, resultMethod='xml')))
+        r1 = set(list(g1.query(q1, result_method='xml')))
+        r2 = set(list(g2.query(q1, result_method='xml')))
         assert r1 == r2
         assert len(r1) == 10, "Ooops, %s, %s" % (len(r1), len(r2))
 

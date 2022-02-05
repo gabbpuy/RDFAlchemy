@@ -7,12 +7,10 @@ Created by Philip Cooper on 2007-11-23.
 Copyright (c) 2007 Openvest. All rights reserved.
 """
 from rdfalchemy import rdfSingle
-from rdfalchemy.rdfSubject import rdfSubject
-from rdflib import Namespace
+from rdfalchemy.namespaces import FOAF
+from rdfalchemy.rdf_subject import rdfSubject
 
 non_core = True
-
-FOAF = Namespace("http://xmlns.com/foaf/0.1/")
 
 
 class Agent(rdfSubject):

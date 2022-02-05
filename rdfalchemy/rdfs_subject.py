@@ -10,42 +10,23 @@ __ ::http://www.w3.org/TR/rdf-schema/
 Created by Philip Cooper on 2008-05-14.
 Copyright (c) 2008 Openvest. All rights reserved.
 """
-
-from rdfalchemy import (
-    rdfSubject,
-    RDF,
-    RDFS,
-    Namespace,
-    BNode,
-    URIRef
-)
-try:
-    from rdflib.py3compat import PY3
-except:
-    from six import PY3
-from rdflib.term import Identifier
-from rdfalchemy.descriptors import (
-    rdfSingle,
-    rdfMultiple,
-    owlTransitive
-)
-from rdfalchemy.orm import mapper, allsub
-
-import logging
-log = logging.getLogger(__name__)
-#log.debug("logger is %s",log.name)
-log.setLevel(logging.INFO)
-
-from weakref import WeakValueDictionary
 import re
+import logging
+from weakref import WeakValueDictionary
 
-OWL = Namespace("http://www.w3.org/2002/07/owl#")
+from rdflib.term import Identifier
+
+from rdfalchemy import rdfSubject, RDF, RDFS, BNode, URIRef
+from rdfalchemy.descriptors import rdfSingle, rdfMultiple, owlTransitive
+from rdfalchemy.namespaces import OWL
+from rdfalchemy.orm import mapper, all_sub
+
+log = logging.getLogger(__name__)
 
 _all_ = ['rdfsSubject', 'rdfsClass', 'rdfsProperty',
          'owlObjectProperty', 'owlDatatypeProperty',
          'owlSymetricProperty', 'owlTransitiveProperty',
          'owlFunctionalProperty', 'owlInverseFunctionalProperty']
-
 
 re_ns_n = re.compile(r'(.*[/#])(.*)')
 
@@ -67,7 +48,7 @@ class rdfsSubject(rdfSubject, Identifier):
             obj = type(resUri.resUri).__new__(cls, resUri.resUri)
             obj._nodetype = type(resUri.resUri)
         # create one from a <uri> or _:bnode string
-        elif isinstance(resUri, (str, unicode)):
+        elif isinstance(resUri, str):
             if resUri[0] == "<" and resUri[-1] == ">":
                 obj = URIRef.__new__(cls, resUri[1:-1])
                 obj._nodetype = URIRef
@@ -86,7 +67,7 @@ class rdfsSubject(rdfSubject, Identifier):
             if rdf_type:
                 class_dict = dict(
                     [(str(cl.rdf_type), cl)
-                        for cl in allsub(cls) if cl.rdf_type])
+                     for cl in all_sub(cls) if cl.rdf_type])
                 subclass = class_dict.get(str(rdf_type.resUri), cls)
             else:
                 subclass = cls
@@ -97,15 +78,15 @@ class rdfsSubject(rdfSubject, Identifier):
         # this uses _weakrefs to allow us to return an existing object
         # rather than copies
         md5id = obj.n3()
-        newobj = rdfsSubject._weakrefs.get(md5id, None)
-        log.debug("looking for weakref %s found %s" % (md5id, newobj))
-        if newobj:
-            return newobj
-        newobj = super(rdfSubject, obj).__new__(subclass, obj.resUri)
-        log.debug("add a weakref %s", newobj)
-        newobj._nodetype = obj._nodetype
-        rdfsSubject._weakrefs[newobj.n3()] = newobj
-        return newobj
+        new_obj = rdfsSubject._weakrefs.get(md5id, None)
+        log.debug("looking for weakref %s found %s", md5id, new_obj)
+        if new_obj:
+            return new_obj
+        new_obj = super(rdfSubject, obj).__new__(subclass, obj.resUri)
+        log.debug("add a weakref %s", new_obj)
+        new_obj._nodetype = obj._nodetype
+        rdfsSubject._weakrefs[new_obj.n3()] = new_obj
+        return new_obj
 
     def __init__(self, resUri=None, **kwargs):
         if not self[RDF.type] and self.rdf_type:
@@ -115,51 +96,53 @@ class rdfsSubject(rdfSubject, Identifier):
 
     @property
     def resUri(self):
-        if PY3:
-            return self._nodetype(self)
-        else:
-            return self._nodetype(str(self))
+        return self._nodetype(self)
 
-    def _splitname(self):
+    def _split_name(self):
         return re.match(r'(.*[/#])(.*)', self.resUri).groups()
 
     @classmethod
     def ClassInstances(cls):
-        """return a generator for instances of this rdf:type
-        you can look in MyClass.rdf_type to see the predicate being used"""
+        """
+        return a generator for instances of this rdf:type
+        you can look in MyClass.rdf_type to see the predicate being used
+        """
         # Start with all things of "my" type in the db
-        beenthere = set([])
+        been_there = set([])
         for i in cls.db.subjects(RDF.type, cls.rdf_type):
-            if not i in beenthere:
+            if i not in been_there:
                 yield cls(i)
-                beenthere.add(i)
+                been_there.add(i)
 
         # for all subclasses of me in python do the same (recursivly)
-        pySubClasses = allsub(cls)
-        for sub in pySubClasses:
+        py_sub_classes = all_sub(cls)
+        for sub in py_sub_classes:
             for i in sub.ClassInstances():
-                if not i in beenthere:
+                if i not in been_there:
                     yield i
-                    beenthere.add(i)
+                    been_there.add(i)
 
         # not done yet, for all db subclasses that I have not processed
         # already...get them too
-        dbSubClasses = rdfsClass(cls.rdf_type).transitive_subClasses
-        moreSubClasses = [
-            dbsub.resUri for dbsub in dbSubClasses
+        db_sub_classes = rdfsClass(cls.rdf_type).transitive_subClasses
+        more_sub_classes = [
+            dbsub.resUri for dbsub in db_sub_classes
             if dbsub.resUri not in [
-                pysub.rdf_type for pysub in pySubClasses]]
-        for sub in moreSubClasses:
+                pysub.rdf_type for pysub in py_sub_classes]]
+        for sub in more_sub_classes:
             for i in cls.db.subjects(RDF.type, sub):
-                if '' and not i in beenthere:
+                # akm: TODO: unreachable?
+                if '' and i not in been_there:
                     yield i
-                    beenthere.add(i)
+                    been_there.add(i)
 
 
 class rdfsClass(rdfsSubject):
-    """rdfSbject with some RDF Schema addons
+    """
+    rdfSbject with some RDF Schema addons
     *Some* inferencing is implied
-    Bleading edge: be careful"""
+    Bleeding edge: be careful
+    """
     rdf_type = RDFS.Class
     comment = rdfSingle(RDFS.comment)
     label = rdfSingle(RDFS.label)
@@ -182,18 +165,23 @@ class rdfsClass(rdfsSubject):
     @property
     def properties(self):
         # this doesn't get the rdfsProperty subclasses
-        # return list(rdfsProperty.filter_by(domain=self.resUri))
+        # return items(rdfsProperty.filter_by(domain=self.resUri))
         # TODO: why iterate all rdfsProperty subclasses
         #       try self.db.subjects(RDFS.domain,self.resUri)
         return [x for x in rdfsProperty.ClassInstances() if x.domain == self]
 
-    def _emit_rdfSubject(self, visitedNS={}, visitedClass=set([])):
+    def _emit_rdfSubject(self, visitedNS=None, visitedClass=None):
         """
         Produce the text that might be used for a .py file
         TODO: This code should probably move into the commands module since
         that's the only place it's used
         """
-        ns, loc = self._splitname()
+        if visitedNS is None:
+            visitedNS = {}
+        if visitedClass is None:
+            visitedClass = set([])
+
+        ns, loc = self._split_name()
         try:
             prefix, qloc = self.db.qname(self.resUri).split(':')
         except:
@@ -216,24 +204,24 @@ from rdfalchemy.orm import mapper
         else:
             src = ""
 
-        mySupers = []
-        for mySuper in self.subClassOf:
-            sns, sloc = mySuper._splitname()
+        my_supers = []
+        for my_super in self.subClassOf:
+            sns, sloc = my_super._split_name()
             if ns == sns:
-                src += mySuper._emit_rdfSubject(visitedNS=visitedNS)
-                mySupers.append(sloc.replace('-', '_'))
+                src += my_super._emit_rdfSubject(visitedNS=visitedNS)
+                my_supers.append(sloc.replace('-', '_'))
 
-        mySupers = ",".join(mySupers) or "rdfsSubject"
-        src += '\nclass %s(%s):\n' % (loc.replace('-', '_'), mySupers)
+        my_supers = ",".join(my_supers) or "rdfsSubject"
+        src += '\nclass %s(%s):\n' % (loc.replace('-', '_'), my_supers)
         src += '\t"""%s %s"""\n' % (self.label, self.comment)
         src += '\trdf_type = %s["%s"]\n' % (visitedNS[ns], loc)
 
         for p in self.properties:
-            pns, ploc = p._splitname()
+            pns, ploc = p._split_name()
             ppy = '%s["%s"]' % (visitedNS[pns], ploc)
             try:
                 assert str(p.range[RDF.type].resUri).endswith('Class')
-                rns, rloc = rdfsSubject(p.range)._splitname()
+                rns, rloc = rdfsSubject(p.range)._split_name()
                 range_type = ', range_type = %s["%s"]' % (visitedNS[rns], rloc)
             except Exception:
                 range_type = ''
@@ -258,9 +246,11 @@ class rdfsProperty(rdfsSubject):
 # Beginings of a OWL package
 
 class owlClass(rdfsClass):
-    """rdfSbject with some RDF Schema addons
+    """
+    rdfSbject with some RDF Schema addons
     *Some* inferencing is implied
-    Bleading edge: be careful"""
+    Bleeding edge: be careful
+    """
     rdf_type = OWL["Class"]
     disjointWith = rdfMultiple(
         OWL["disjointWith"], range_type=OWL["Class"])
@@ -310,6 +300,7 @@ class owlSymetricProperty(owlObjectProperty):
 class owlTransitiveProperty(owlObjectProperty):
     rdf_type = OWL.TransitiveProperty
     default_descriptor = owlTransitive
+
 
 # this maps the return type of subClassOf back to rdfsClass
 mapper()

@@ -1,20 +1,16 @@
-from rdfalchemy import rdfSingle
-from rdfalchemy.rdfSubject import rdfSubject
-from rdflib import ConjunctiveGraph, Namespace
+import logging
 import os
+
+from rdflib import ConjunctiveGraph, Namespace
+from rdfalchemy import rdfSingle
+from rdfalchemy.rdf_subject import rdfSubject
+from rdfalchemy.namespaces import OV, VCARD
+
+log = logging.getLogger()
 
 non_core = True
 
-import logging
-log = logging.getLogger()
-log.addHandler(logging.StreamHandler())
-log.setLevel(logging.WARN)
-
-OV = Namespace('http://owl.openvest.org/2005/10/Portfolio#')
-VCARD = Namespace("http://www.w3.org/2006/vcard/ns#")
-
 rdfSubject.db = ConjunctiveGraph()
-
 rdfSubject.db.load(
     os.path.join(os.path.split(__file__)[:-1])[0] + '/data/example.n3',
     format='n3')
@@ -39,7 +35,7 @@ log = logging.getLogger('rdfAlchemy')
 ## comment out to quiet debug messages
 log.setLevel(logging.DEBUG)
 
-## list Companies
+## items Companies
 for c in Company.ClassInstances():
     print("%s has an SEC symbol of %s" % (c.companyName, c.cik))
 print('')

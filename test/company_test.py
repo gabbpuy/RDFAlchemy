@@ -1,10 +1,15 @@
-from rdfalchemy import rdfSingle
-from rdfalchemy.rdfSubject import rdfSubject
+from io import StringIO
+import logging
+import unittest
+
 from rdflib import BNode
 from rdflib import ConjunctiveGraph
-from rdflib import Namespace
 
-from StringIO import StringIO
+from rdfalchemy import rdfSingle
+from rdfalchemy.namespaces import OV, VCARD
+from rdfalchemy.rdf_subject import rdfSubject
+
+log = logging.getLogger('rdfAlchemy')
 
 n3data = """
 @prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#>.
@@ -35,9 +40,6 @@ ov:C_US_IBM a ov:Company;
 operates as an information technology (IT) company worldwide. It has .....".
 """
 
-OV = Namespace('http://owl.openvest.org/2005/10/Portfolio#')
-VCARD = Namespace("http://www.w3.org/2006/vcard/ns#")
-
 rdfSubject.db = ConjunctiveGraph()
 rdfSubject.db.parse(StringIO(n3data), format='n3')
 
@@ -54,66 +56,56 @@ class Company(rdfSubject):
 ##########################################################################
 # Below here goes in the file with business logic agnostic of persistance
 
-c = Company.get_by(symbol='IBM')
-## this will enable us to see that the reads are cached
-import logging
-log = logging.getLogger('rdfAlchemy')
-## comment out to quite debug messages
-log.setLevel(logging.DEBUG)
 
+class TestCompany(unittest.TestCase):
+    def setUp(self):
+        self.c = Company.get_by(symbol='IBM')
 
-def test_1():
-    c = Company.get_by(cik="0000051143")
-    assert c.symbol == "IBM"
+    def test_1(self):
+        c = Company.get_by(cik="0000051143")
+        assert c.symbol == "IBM"
 
-## list Companies
-for c in Company.ClassInstances():
-    print("%s has an SEC symbol of %s" % (c.companyName, c.cik))
-print('')
+        # items Companies
+        for c in Company.ClassInstances():
+            print("%s has an SEC symbol of %s" % (c.companyName, c.cik))
+        print('')
 
+    def test_2(self):
+        # Add a descriptor on the fly
+        Company.stockDescription = rdfSingle(OV.stockDescription, 'stockDescription')
+        assert self.c.companyName == self.c[OV.companyName]
 
-def test_2():
-    ## Add a descriptor on the fly
-    Company.stockDescription = rdfSingle(
-        OV.stockDescription, 'stockDescription')
-    assert c.companyName == c[OV.companyName]
+        # add another descriptor on the fly
+        Company.industry = rdfSingle(OV.yindustry, 'industry')
 
+        # add an attribute (from the database)
+        c = Company.get_by(symbol='JAVA')
+        c.industry = 'Computer stuff'
 
-## add another descriptor on the fly
-Company.industry = rdfSingle(OV.yindustry, 'industry')
+    def test_3(self):
+        # delete an attribute (from the database)
+        c = Company.get_by(symbol='IBM')
+        assert c.industry == "Diversified Computer Systems"
+        del c.industry
+        assert c.industry != "Diversified Computer Systems"
+        c = Company.get_by(symbol='IBM')
+        assert not c.industry
 
-## add an attribute (from the database)
-c = Company.get_by(symbol='JAVA')
-c.industry = 'Computer stuff'
+    def test_set_none_value(self):
+        """
+        Setting None should be the equivalent of deleting an attribute.
+        """
+        c = Company.get_by(symbol='IBM')
+        assert c.companyName == "International Business Machines Corp."
+        c.companyName = None
+        assert c.companyName != "International Business Machines Corp."
+        c = Company.get_by(symbol='IBM')
+        assert not c.companyName
 
-
-def test_3():
-    ## delete an attribute (from the database)
-    c = Company.get_by(symbol='IBM')
-    assert c.industry == "Diversified Computer Systems"
-    del c.industry
-    assert c.industry != "Diversified Computer Systems"
-    c = Company.get_by(symbol='IBM')
-    assert not c.industry
-
-
-def test_set_none_value():
-    '''Setting None should be the equivalent of deleting an attribute.'''
-    c = Company.get_by(symbol='IBM')
-    assert c.companyName == "International Business Machines Corp."
-    c.companyName = None
-    assert c.companyName != "International Business Machines Corp."
-    c = Company.get_by(symbol='IBM')
-    assert not c.companyName
-
-
-def test_creating():
-    c2 = Company(OV.A)
-    c3 = Company('<http://owl.openvest.org/2005/10/Portfolio#A>')
-    c4 = Company('_:xyz123')
-    #assert c2==c3
-    assert c2.resUri == c3.resUri
-    assert c4.resUri == BNode('xyz123')
-
-# write out the new n3 file to see the changes
-# c.db.serialize('example-out.n3',format='n3')
+    def test_creating(self):
+        c2 = Company(OV.A)
+        c3 = Company('<http://owl.openvest.org/2005/10/Portfolio#A>')
+        c4 = Company('_:xyz123')
+        #assert c2==c3
+        assert c2.resUri == c3.resUri
+        assert c4.resUri == BNode('xyz123')

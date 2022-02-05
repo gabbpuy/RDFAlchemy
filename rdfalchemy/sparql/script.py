@@ -7,11 +7,12 @@ Created by Philip Cooper on 2008-04-29.
 Copyright (c) 2008 Openvest.
 BSD License.
 """
+import optparse
+import re
+import sys
+
 from rdfalchemy.sparql import SPARQLGraph
 from rdfalchemy import __version__
-import sys
-import re
-import optparse
 
 
 usage = 'usage: sparql [options] [endpointURL] query_file'
@@ -58,7 +59,7 @@ def main(url=None):
         if fname == '-':
             stream = sys.stdin
         else:
-            stream = file(fname)
+            stream = open(fname)
 
         query = stream.read()
 
@@ -77,12 +78,11 @@ def main(url=None):
             output = open(opts.fout, "w")
 
         result = SPARQLGraph(url).query(
-            query, resultMethod=opts.format, rawResults=True)
-        print >>output, result.read()
-
-    except Usage, err:
-        print >> sys.stderr, sys.argv[0].split("/")[-1] + ": " + str(err.msg)
-        print >> sys.stderr, "\t for help use --help"
+            query, result_method=opts.format, raw_results=True)
+        print(result.read(), file=output)
+    except Usage as err:
+        print(sys.argv[0].split("/")[-1] + ": " + str(err.msg), file=sys.stderr)
+        print("\t for help use --help", file=sys.stderr)
         return 2
 
 

@@ -1,21 +1,20 @@
 from rdflib import Namespace
 # this has the rdfSubject stuff and the Fresnel stuff
 from rdfalchemy import rdfSingle, rdfMultiple
-from rdfalchemy.rdfSubject import rdfSubject
-
+from rdfalchemy.rdf_subject import rdfSubject
+from rdfalchemy.namespaces import OV
 non_core = True
 
-ov = Namespace("http://owl.openvest.org/2005/10/Portfolio#")
 edgarns = Namespace('http://www.sec.gov/Archives/edgar')
 
 
 class Company(rdfSubject):
-    rdf_type = ov.Company
-    symbol = rdfSingle(ov.symbol,)
-    cik = rdfSingle(ov.secCik, 'cik')
-    companyName = rdfSingle(ov.companyName, 'companyName')
-    stockDescription = rdfSingle(ov.stockDescription, 'stockDescription')
-    stock = rdfMultiple(ov.hasIssue)
+    rdf_type = OV.Company
+    symbol = rdfSingle(OV.symbol, )
+    cik = rdfSingle(OV.secCik, 'cik')
+    companyName = rdfSingle(OV.companyName, 'companyName')
+    stockDescription = rdfSingle(OV.stockDescription, 'stockDescription')
+    stock = rdfMultiple(OV.hasIssue)
 
 
 class EdgarFiling(rdfSubject):
