@@ -8,6 +8,8 @@ import urllib.parse
 
 from rdflib import ConjunctiveGraph
 
+from rdfalchemy.sparql.sesame2 import SesameGraph
+from rdfalchemy.sparql import SPARQLGraph
 
 def create_engine(url='', identifier="", create=False):
     """
@@ -18,8 +20,7 @@ def create_engine(url='', identifier="", create=False):
 
       - create_engine('sleepycat://~/working/rdf_db')
       - create_engine('kyotocabinet://~/working/rdf_db')
-      - create_engine(
-            'sesame://www.example.com:8080/openrdf-sesame/repositories/Test')
+      - create_engine('sesame://www.example.com:8080/openrdf-sesame/repositories/Test')
       - create_engine('sparql://www.example.com:2020/sparql')
 
     for sqlalchemy, prepend the string "sqlachemy+" to a valid SQLAlchemy dburi
@@ -34,24 +35,29 @@ def create_engine(url='', identifier="", create=False):
     :param create: create if missing flag
     """
     if url == '' or url.startswith('IOMemory'):
-        db = ConjunctiveGraph('IOMemory')
-    elif url.lower().startswith('sleepycat://'):
+        return ConjunctiveGraph('IOMemory')
+
+    parsed = urllib.parse.urlparse(url)
+    path = parsed.path
+    if parsed.netloc:
+        path = parsed.netloc + path
+
+    if parsed.scheme == 'sleepycat':
         db = ConjunctiveGraph('Sleepycat', identifier=identifier)
-        openstr = os.path.abspath(os.path.expanduser(url[12:]))
+        openstr = os.path.abspath(os.path.expanduser(path))
         db.open(openstr, create=create)
-    elif url.lower().startswith('kyotocabinet://'):
+    elif parsed.scheme == 'kyotocabinet':
         db = ConjunctiveGraph('Kyotocabinet', identifier=identifier)
-        openstr = os.path.abspath(os.path.expanduser(url[15:]))
+        openstr = os.path.abspath(os.path.expanduser(path))
         db.open(openstr, create=create)
-    elif url.lower().startswith('sqlalchemy+'):
+    elif parsed.scheme.startswith('sqlalchemy+'):
+        _, db = parsed.scheme.rsplit('+', 1)
+        path = f'{db}:{path}'
         db = ConjunctiveGraph('SQLAlchemy', identifier=identifier)
-        db.open(url[11:], create=create)
-    elif url.lower().startswith('sesame://'):
-        from rdfalchemy.sparql.sesame2 import SesameGraph
-        db = SesameGraph("http://" + url[9:])
-    elif url.lower().startswith('sparql://'):
-        from rdfalchemy.sparql import SPARQLGraph
-        db = SPARQLGraph("http://" + url[9:])
+        db.open(path, create=create)
+    elif parsed.scheme in ('sesame', 'sparql'):
+        # XXX - http or https?
+        db = SesameGraph(f"https://{path}")
     else:
         raise "Could not parse  string '%s'" % url
     return db
@@ -95,16 +101,15 @@ def _parse_rfc1738_args(name):
         if database is not None:
             tokens = database.split(r"?", 2)
             database = tokens[0]
-            query = (
-                len(tokens) > 1 and dict(
-                    cgi.parse_qsl(tokens[1])) or None)
+            query = len(tokens) > 1 and dict(cgi.parse_qsl(tokens[1])) or None
             if query is not None:
                 query = dict([(k.encode('ascii'), query[k]) for k in query])
         else:
             query = None
         opts = {
             'username': username, 'password': password, 'host': host,
-            'port': port, 'database': database, 'query': query}
+            'port': port, 'database': database, 'query': query
+        }
         if opts['password'] is not None:
             opts['password'] = urllib.parse.unquote_plus(opts['password'])
         return name, opts

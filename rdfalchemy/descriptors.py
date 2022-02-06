@@ -87,7 +87,7 @@ def value2object(value):
 
 class rdfAbstract:
     """
-    Abstract base class for descriptors
+    Abstract base class for descriptors.
     Descriptors are to map class instance variables to predicates
     optional cache_name is where to store items
     range_type is the rdf:type of the range of this predicate
@@ -133,7 +133,7 @@ class rdfAbstract:
 class rdfSingle(rdfAbstract):
     """
     This is a Descriptor
-    Takes a the URI of the predicate at initialization
+    Takes `a` the URI of the predicate at initialization
     Expects to return a single item
     on Assignment will set that value to the
     ONLY triple with that subject,predicate pair

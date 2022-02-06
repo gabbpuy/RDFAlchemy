@@ -1,3 +1,5 @@
+from abc import abstractmethod, ABCMeta
+from enum import IntEnum
 from io import TextIOWrapper
 import json
 import logging
@@ -14,7 +16,21 @@ __all__ = ["_JSONSPARQLHandler", "_XMLSPARQLHandler", "_BRTRSPARQLHandler"]
 log = logging.getLogger(__name__)
 
 
-class _SPARQLHandler:
+class _BRTR_Type(IntEnum):
+    Null = 0
+    Repeat = 1
+    Namespace = 2
+    Qname = 3
+    URI = 4
+    Bnode = 5
+    PlainLiteral = 6
+    LanguageLiteral = 7
+    DataLiteral = 8
+    Error = 126
+    EOF = 127
+
+
+class _SPARQLHandler(metaclass=ABCMeta):
 
     """
     Abstract base class for parsing the response stream of a sparql query
@@ -22,7 +38,7 @@ class _SPARQLHandler:
     Real classes should subclass from here but should **not** do too much
     during `__init__`
 
-    `__init__` should stip after opening the stream and not read so that
+    `__init__` should stop after opening the stream and not read so that
     users have the option to call p.stream.read() to get the rawResults
     """
     mimetype = ""
@@ -33,38 +49,41 @@ class _SPARQLHandler:
             req.add_header('Accept', self.mimetype)
         self.stream = urlopen(req)
 
+    @abstractmethod
+    def parse(self):
+        pass
+
 
 class _JSONSPARQLHandler(_SPARQLHandler):
 
-    """Parse the results of a sparql query returned as json.
+    """
+    Parse the results of a sparql query returned as json.
 
-    Note: this uses json.load which will consume the entire
+    Note: this uses `json.load` which will consume the entire
     stream before returning any results. The XML handler uses a generator
     type return so it returns the first tuple as soon as it's available
-    *without* having to comsume the entire stream
+    *without* having to consume the entire stream
     """
     mimetype = 'application/sparql-results+json'
 
     def parse(self):
-        ret = json.load(
-            TextIOWrapper(self.stream),
-            encoding=self.stream.info().get_content_charset('utf8'))
+        ret = json.load(TextIOWrapper(self.stream), encoding=self.stream.info().get_content_charset('utf8'))
         var_names = ret['head']['vars']
         bindings = ret['results']['bindings']
         for bdg in bindings:
             for var, val in bdg.items():
-                type = val['type']
-                if type == 'uri':
+                triple_type = val['type']
+                if triple_type == 'uri':
                     bdg[var] = URIRef(val['value'])
-                elif type == 'bnode':
+                elif triple_type == 'bnode':
                     bdg[var] = BNode(val['value'])
-                elif type == 'literal':
+                elif triple_type == 'literal':
                     bdg[var] = Literal(val['value'], lang=val.get('xml:lang'))
-                elif type == 'typed-literal':
+                elif triple_type == 'typed-literal':
                     bdg[var] = Literal(val['value'], datatype=val.get('datatype'))
                 else:
-                    raise AttributeError("Binding type error: %s" % (type))
-            yield tuple([bdg.get(var) for var in var_names])
+                    raise AttributeError(f"Binding type error: {triple_type}")
+            yield tuple(bdg.get(var) for var in var_names)
 
 
 # some constants for parsing the xml tree
@@ -95,6 +114,7 @@ class _XMLSPARQLHandler(_SPARQLHandler):
     def parse(self):
         var_names = []
         bindings = []
+        idx = 0
         events = iter(ET.iterparse(self.stream, events=('start', 'end')))
         # lets gather up the variable names in head
         for (event, node) in events:
@@ -128,10 +148,14 @@ class _BRTRSPARQLHandler(_SPARQLHandler):
     """
     Handler for the sesame binary table format BRTR_
 
-    .. _BRTR: http://www.openrdf.org/doc/sesame/api/org/openrdf
+    .. _BRTR: https://www.openrdf.org/doc/sesame/api/org/openrdf
     /sesame/query/BinaryTableResultConstants.html
     """
     mimetype = "application/x-binary-rdf-results-table"
+
+    def __init__(self, url):
+        super().__init__(url)
+        self.ns = {}
 
     def read_int(self):
         return unpack('>i', self.stream.read(4))[0]
@@ -143,49 +167,50 @@ class _BRTRSPARQLHandler(_SPARQLHandler):
     def parse(self):
         if self.stream.read(4) != b'BRTR':
             raise ParseError("First 4 bytes in should be BRTR")
-        self.ver = self.read_int()  # ver of protocol
-        self.ncols = self.read_int()
-        self.keys = tuple(self.read_str() for x in range(self.ncols))
-        self.values = [None, ] * self.ncols
+        _ver = self.read_int()  # ver of protocol
+        number_columns = self.read_int()
+        _keys = tuple(self.read_str() for _ in range(number_columns))
+        values = [None, ] * number_columns
         self.ns = {}
+
         while True:
-            for i in range(self.ncols):
+            for i in range(number_columns):
                 val = self.get_val()
                 if val == 1:  # REPEAT here is like skip..
                     continue  # the val is already in self.values[i]
-                self.values[i] = val
-            yield tuple(self.values)
+                values[i] = val
+            yield tuple(values)
 
     def get_val(self):
         while True:
             rtype = ord(self.stream.read(1))
-            if rtype == 0:  # NULL
+            if rtype == _BRTR_Type.Null:
                 return None
-            elif rtype == 1:  # REPEAT
+            elif rtype == _BRTR_Type.Repeat:
                 return 1
-            elif rtype == 2:  # NAMESPACE
-                nsid = self.read_int()
+            elif rtype == _BRTR_Type.Namespace:
+                namespace_id = self.read_int()
                 url = self.read_str()
-                self.ns[nsid] = url
-            elif rtype == 3:  # QNAME
-                nsid = self.read_int()
-                localname = self.read_str()
-                return URIRef(self.ns[nsid] + localname)
-            elif rtype == 4:  # URI
+                self.ns[namespace_id] = url
+            elif rtype == _BRTR_Type.Qname:
+                namespace_id = self.read_int()
+                local_name = self.read_str()
+                return URIRef(self.ns[namespace_id] + local_name)
+            elif rtype == _BRTR_Type.URI:
                 return URIRef(self.read_str())
-            elif rtype == 5:  # BNODE
+            elif rtype == _BRTR_Type.Bnode:
                 return BNode(self.read_str())
-            elif rtype == 6:  # PLAIN LITERAL
+            elif rtype == _BRTR_Type.PlainLiteral:
                 return Literal(self.read_str())
-            elif rtype == 7:  # LANGUAGE LITERAL
+            elif rtype == _BRTR_Type.LanguageLiteral:
                 lit = self.read_str()
                 lang = self.read_str()
                 return Literal(lit, lang=lang)
-            elif rtype == 8:  # DATATYPE LITERAL
+            elif rtype == _BRTR_Type.DataLiteral:
                 lit = self.read_str()
                 datatype = self.get_val()
                 return Literal(lit, datatype=datatype)
-            elif rtype == 126:  # ERROR
+            elif rtype == _BRTR_Type.Error:  # ERROR
                 errType = ord(self.stream.read(1))
                 errStr = self.read_str()
                 if errType == 1:
@@ -194,7 +219,7 @@ class _BRTRSPARQLHandler(_SPARQLHandler):
                     raise QueryEvaluationError(errStr)
                 else:
                     raise errStr
-            elif rtype == 127:  # EOF
+            elif rtype == _BRTR_Type.EOF:  # EOF
                 raise StopIteration()
             else:
-                raise ParseError("Undefined record type: %s" % rtype)
+                raise ParseError(f"Undefined record type: {rtype}")
