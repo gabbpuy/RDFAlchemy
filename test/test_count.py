@@ -26,6 +26,7 @@ class CountTest(unittest.TestCase):
         assert len(Person.db) == 2
 
     def test_multi(self):
+        Person(last="Cooper")
         Person.m = rdfalchemy.rdfMultiple(FOAF.multi)
         Person.l = rdfalchemy.rdfList(FOAF.list)
         Person.c = rdfalchemy.rdfContainer(FOAF.seq)
@@ -38,26 +39,31 @@ class CountTest(unittest.TestCase):
         assert len(Person.db) == 5
 
     def test_list(self):
+        Person(last="Cooper")
         Person.m = rdfalchemy.rdfMultiple(FOAF.multi)
         Person.l = rdfalchemy.rdfList(FOAF.list)
         Person.c = rdfalchemy.rdfContainer(FOAF.seq)
 
         # set and reset a items
         p = next(Person.ClassInstances())
+        p.m = ['a', 'b', 'c']
         p.l = [10, 2.3, 0, 'A', '', 'C']
-        assert len(Person.db) == 18
+        assert len(Person.db) == 18, len(Person.db)
 
         p.l = [10, 2.3, 0]
-        assert len(Person.db) == 12
+        assert len(Person.db) == 12, len(Person.db)
 
     def test_seq(self):
+        Person(last="Cooper")
         Person.m = rdfalchemy.rdfMultiple(FOAF.multi)
         Person.l = rdfalchemy.rdfList(FOAF.list)
         Person.c = rdfalchemy.rdfContainer(FOAF.seq)
 
         p = next(Person.ClassInstances())
-        p.c = range(10)
-        assert len(Person.db) == 24
+        p.m = ['a', 'b', 'c']
+        p.l = [10, 2.3, 0]
+        p.c = list(range(10))
+        assert len(Person.db) == 24, len(Person.db)
 
         p.c = ['things', 44]
-        assert len(Person.db) == 16
+        assert len(Person.db) == 16, len(Person.db)

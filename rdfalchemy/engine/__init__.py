@@ -6,6 +6,8 @@ import os
 import re
 import urllib.parse
 
+from rdflib import ConjunctiveGraph
+
 
 def create_engine(url='', identifier="", create=False):
     """
@@ -16,17 +18,9 @@ def create_engine(url='', identifier="", create=False):
 
       - create_engine('sleepycat://~/working/rdf_db')
       - create_engine('kyotocabinet://~/working/rdf_db')
-      - create_engine('zodb:///var/rdflib/Data.fs')
-      - create_engine('zodb://localhost:8672')
       - create_engine(
             'sesame://www.example.com:8080/openrdf-sesame/repositories/Test')
       - create_engine('sparql://www.example.com:2020/sparql')
-
-    for zodb:
-
-    the key in the Zope database is hardcoded as 'rdflib', urls ending in `.fs`
-    indicate FileStorage, otherwise ClientStorage is assumed which requires
-    a ZEO Server to be running
 
     for sqlalchemy, prepend the string "sqlachemy+" to a valid SQLAlchemy dburi
     form:
@@ -37,37 +31,27 @@ def create_engine(url='', identifier="", create=False):
       - create_engine('sqlalchemy+postgresql://myname@localhost/rdflibdb')
 
     etc.
-    :param create: ...
+    :param create: create if missing flag
     """
     if url == '' or url.startswith('IOMemory'):
-        from rdflib import ConjunctiveGraph
         db = ConjunctiveGraph('IOMemory')
-
     elif url.lower().startswith('sleepycat://'):
-        from rdflib import ConjunctiveGraph
         db = ConjunctiveGraph('Sleepycat', identifier=identifier)
         openstr = os.path.abspath(os.path.expanduser(url[12:]))
         db.open(openstr, create=create)
-
     elif url.lower().startswith('kyotocabinet://'):
-        from rdflib import ConjunctiveGraph
         db = ConjunctiveGraph('Kyotocabinet', identifier=identifier)
         openstr = os.path.abspath(os.path.expanduser(url[15:]))
         db.open(openstr, create=create)
-
     elif url.lower().startswith('sqlalchemy+'):
-        from rdflib import ConjunctiveGraph
         db = ConjunctiveGraph('SQLAlchemy', identifier=identifier)
         db.open(url[11:], create=create)
-
     elif url.lower().startswith('sesame://'):
         from rdfalchemy.sparql.sesame2 import SesameGraph
         db = SesameGraph("http://" + url[9:])
-
     elif url.lower().startswith('sparql://'):
         from rdfalchemy.sparql import SPARQLGraph
         db = SPARQLGraph("http://" + url[9:])
-
     else:
         raise "Could not parse  string '%s'" % url
     return db
@@ -81,10 +65,7 @@ def engine_from_config(configuration, prefix='rdfalchemy.', **kwargs):
         where keys are prefixed, such as `rdfalchemy.dburi`, etc.
     :param prefix: indicates the prefix to be searched for.
     """
-    options = dict(
-        [(key[len(prefix):], configuration[key])
-            for key in configuration if key.startswith(prefix)])
-
+    options = {key[len(prefix):]: configuration[key] for key in configuration if key.startswith(prefix)}
     options.update(kwargs)
     url = options.pop('dburi')
     return create_engine(url, **options)

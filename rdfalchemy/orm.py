@@ -20,7 +20,7 @@ def all_sub(cl, been_there=None):
     return all subclasses of the given class
     """
     if been_there is None:
-        been_there = set([])
+        been_there = set()
     sub = set(cl.__subclasses__()) | been_there
     new_subs = set(cl.__subclasses__()) - been_there
     for one_sub in new_subs:
@@ -48,8 +48,7 @@ def mapper(*classes):
                 try:
                     v._mappedClass = class_dict[str(v.range_type)]
                 except KeyError:
-                    warnings.warn("No Class Found\nFailed to map %s range of %s" % (
-                        v, v.range_type))
+                    warnings.warn(f"No Class Found\nFailed to map {v} range of {v.range_type}")
     return class_dict
 
 # def mapBase(baseclass):

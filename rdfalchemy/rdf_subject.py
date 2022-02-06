@@ -74,8 +74,7 @@ class rdfSubject:
                 self.db.add((self.resUri, RDF.type, self.rdf_type))
 
         else:
-            raise AttributeError("cannot construct rdfSubject from %s" % (
-                str(resUri)))
+            raise AttributeError(f"cannot construct rdfSubject from {resUri}")
 
         if kwargs:
             self._set_with_dict(kwargs)
@@ -97,8 +96,7 @@ class rdfSubject:
         for kls in cls.mro():
             if key in kls.__dict__:
                 return kls.__dict__[key]
-        raise AttributeError(
-            "descriptor %s not found for class %s" % (key, cls))
+        raise AttributeError(f"descriptor {key} not found for class {cls}")
 
     # short term hack.  Need to go to a sqlalchemy 0.4 style query method
     # obj.query.get_by should map to obj.get_by  ..same for fetch_by
@@ -123,9 +121,7 @@ class rdfSubject:
             that is of type owl:InverseFunctional
         """
         if len(kwargs) != 1:
-            raise ValueError(
-                "get_by wanted exactly 1 but got  %i args\n"
-                "Maybe you wanted filter_by" % (len(kwargs)))
+            raise ValueError(f"get_by wanted exactly 1 but got {len(kwargs)} args\nMaybe you wanted filter_by")
         key, value = next(iter(kwargs.items()))
         if isinstance(value, (URIRef, BNode, Literal)):
             o = value
@@ -136,7 +132,7 @@ class rdfSubject:
         if uri:
             return cls(uri)
         else:
-            raise LookupError("%s = %s not found" % (key, value))
+            raise LookupError(f"{key} = {value} not found")
 
     @classmethod
     def filter_by(cls, **kwargs):
@@ -170,7 +166,7 @@ class rdfSubject:
                 try:
                     cls.db.triples((sub, pred, obj)).next()
                 except:
-                    warnings.warn("No %s" % sub)
+                    warnings.warn(f"No {sub}")
                     break
             else:
                 yield cls(sub)
@@ -181,7 +177,6 @@ class rdfSubject:
         return a generator for instances of this rdf:type
         you can look in MyClass.rdf_type to see the predicate being used
         """
-        log.info('ClassInstances() IN')
         been_there = set()
         for i in cls.db.subjects(RDF.type, cls.rdf_type):
             log.info('ClassInstances: %s, seen: %s', i, i in been_there)
@@ -217,8 +212,7 @@ class rdfSubject:
         return self.n3() > other.n3()
 
     def __repr__(self):
-        return """%s('%s')""" % (
-            self.__class__.__name__, self.n3().encode('utf-8'))
+        return f"{self.__class__.__name__}('{self.n3().encode('utf-8')})"
 
     def __getitem__(self, pred):
         log.debug("Getting with __getitem__ %s for %s", pred, self.n3())
@@ -251,7 +245,7 @@ class rdfSubject:
             descriptor = self.__class__._get_descriptor(key)
             descriptor.__set__(self, value)
 
-    def _remove(self, db=None, cascade='bnode', bnodeCheck=True, objectCascade=False):
+    def _remove(self, db=None, cascade='bnode', bnode_check=True, object_cascade=False):
         """
         Remove all triples where this rdfSubject is the subject of the triple
 
@@ -262,14 +256,14 @@ class rdfSubject:
             * bnode -- (default) remove all unreferenced bnodes
             * all -- remove all unreferenced bnode(s) AND uri(s)
 
-        :param bnodeCheck: boolean
+        :param bnode_check: boolean
 
             * True -- (default) check bnodes and raise exception if there are
               still references to this node
             * False --  do not check.  This can leave orphaned object reference
               in triples.  Use only if you are resetting the value in
               the same transaction
-        :param objectCascade: boolean
+        :param object_cascade: boolean
             * False -- (default) do nothing
             * True -- delete also all triples where this refSubject is the
             object of the triple.
@@ -281,9 +275,9 @@ class rdfSubject:
 
         # we cannot delete a bnode if it is still referenced,
         # i.e. if it is the o of a s,p,o
-        if bnodeCheck and isinstance(node_ref, BNode):
+        if bnode_check and isinstance(node_ref, BNode):
             for s, p, o in db.triples((None, None, node_ref)):
-                raise RDFAlchemyError("Cannot delete BNode %s because %s still references it" % (node_ref.n3(), s.n3()))
+                raise RDFAlchemyError(f"Cannot delete BNode {node_ref.n3()} because {s.n3()} still references it")
 
         # determine an appropriate test for cascade decisions
         if cascade == 'bnode':
@@ -291,7 +285,7 @@ class rdfSubject:
             def test(node):
                 if isinstance(node, (URIRef, Literal)):
                     return False
-                for s, p, o in db.triples((None, None, node)):
+                for _triple in db.triples((None, None, node)):
                     return False
                 return True
         elif cascade == 'none':
@@ -316,7 +310,7 @@ class rdfSubject:
             if test(o):
                 rdfSubject(o)._remove(db=db, cascade=cascade)
 
-        if objectCascade:
+        if object_cascade:
             for s, p, o in db.triples((None, None, node_ref)):
                 db.remove((s, p, o))
 
@@ -327,7 +321,7 @@ class rdfSubject:
         if not db:
             db = self.db
         if not (isinstance(name, (BNode, URIRef))):
-            raise AttributeError("cannot rename to %s" % name)
+            raise AttributeError(f"cannot rename to {name}")
         for s, p, o in db.triples((self.resUri, None, None)):
             db.remove((s, p, o))
             db.add((name, p, o))
@@ -343,6 +337,6 @@ class rdfSubject:
         """
         db = db or self.db
         for p, o in db.predicate_objects(self.resUri):
-            print("%20s = %s" % (db.qname(p), str(o)))
+            print(f"{db.qname(p):20s} = {o}")
             # print "%20s = %s" % (db.qname(p), str(o))
         print(" ")

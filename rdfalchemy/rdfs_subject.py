@@ -108,7 +108,7 @@ class rdfsSubject(rdfSubject, Identifier):
         you can look in MyClass.rdf_type to see the predicate being used
         """
         # Start with all things of "my" type in the db
-        been_there = set([])
+        been_there = set()
         for i in cls.db.subjects(RDF.type, cls.rdf_type):
             if i not in been_there:
                 yield cls(i)
@@ -179,15 +179,13 @@ class rdfsClass(rdfsSubject):
         if visitedNS is None:
             visitedNS = {}
         if visitedClass is None:
-            visitedClass = set([])
+            visitedClass = set()
 
         ns, loc = self._split_name()
         try:
             prefix, qloc = self.db.qname(self.resUri).split(':')
         except:
-            raise Exception(
-                "don't know how to handle a qname like %s" % (
-                    self.db.qname(self.resUri)))
+            raise Exception(f"don't know how to handle a qname like {self.db.qname(self.resUri)}")
         prefix = prefix.upper()
 
         if not visitedNS:
@@ -199,8 +197,7 @@ from rdfalchemy.orm import mapper
 """
             for k, v in self.db.namespaces():
                 visitedNS[str(v)] = k.upper()
-                src += '%s = Namespace("%s")\n' % (
-                    k.upper().replace('-', '_'), v)
+                src += f'{k.upper().replace("-", "_")} = Namespace("{v}")\n'
         else:
             src = ""
 
@@ -212,21 +209,20 @@ from rdfalchemy.orm import mapper
                 my_supers.append(sloc.replace('-', '_'))
 
         my_supers = ",".join(my_supers) or "rdfsSubject"
-        src += '\nclass %s(%s):\n' % (loc.replace('-', '_'), my_supers)
-        src += '\t"""%s %s"""\n' % (self.label, self.comment)
-        src += '\trdf_type = %s["%s"]\n' % (visitedNS[ns], loc)
+        src += f'\nclass {loc.replace("-", "_")}({my_supers}):\n'
+        src += f'\t"""{self.label} {self.comment}"""\n'
+        src += f'\trdf_type = {visitedNS[ns]}["{loc}"]\n'
 
         for p in self.properties:
             pns, ploc = p._split_name()
-            ppy = '%s["%s"]' % (visitedNS[pns], ploc)
+            ppy = f'{visitedNS[pns]}["{ploc}"]'
             try:
                 assert str(p.range[RDF.type].resUri).endswith('Class')
                 rns, rloc = rdfsSubject(p.range)._split_name()
-                range_type = ', range_type = %s["%s"]' % (visitedNS[rns], rloc)
+                range_type = f', range_type = {visitedNS[rns]}["{rloc}"]'
             except Exception:
                 range_type = ''
-            src += '\t%s = rdfMultiple(%s%s)\n' % (
-                ploc.replace('-', '_'), ppy, range_type)
+            src += f'\t{ploc.replace("-","_")} = rdfMultiple({ppy}{range_type})\n'
 
         # Just want this once at the end
         src.replace("mapper()\n", "")
