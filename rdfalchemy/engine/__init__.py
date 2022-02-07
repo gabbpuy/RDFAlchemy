@@ -1,6 +1,4 @@
-"""
-
-"""
+# -*- coding: utf-8 -*-
 import cgi
 import os
 import re
@@ -10,6 +8,7 @@ from rdflib import ConjunctiveGraph
 
 from rdfalchemy.sparql.sesame2 import SesameGraph
 from rdfalchemy.sparql import SPARQLGraph
+
 
 def create_engine(url='', identifier="", create=False):
     """
@@ -57,9 +56,10 @@ def create_engine(url='', identifier="", create=False):
         db.open(path, create=create)
     elif parsed.scheme in ('sesame', 'sparql'):
         # XXX - http or https?
-        db = SesameGraph(f"https://{path}")
+        clients = {'sesame': SesameGraph, 'sparql': SPARQLGraph}
+        db = clients[parsed.scheme](f"https://{path}")
     else:
-        raise "Could not parse  string '%s'" % url
+        raise f"Could not parse  string '{url}'"
     return db
 
 

@@ -3,7 +3,7 @@ import json
 import logging
 import os
 from urllib.error import HTTPError
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 from urllib.request import urlopen, Request
 
 # from rdfalchemy import Literal, BNode, Namespace, URIRef
@@ -14,7 +14,7 @@ from rdfalchemy.sparql.parsers import (
     _JSONSPARQLHandler
 )
 from rdflib.plugins.serializers.nt import _quoteLiteral
-from rdflib.plugins.parsers.ntriples import NTParser as NTriplesParser
+from rdflib.plugins.parsers.ntriples import W3CNTriplesParser as NTriplesParser
 
 __all__ = ["SesameGraph"]
 
@@ -119,6 +119,7 @@ class SesameGraph(SPARQLGraph):
                 return
             else:
                 log.error(e)
+            return
         return result
 
     def remove(self, xxx_todo_changeme2, context=None):
@@ -137,57 +138,61 @@ class SesameGraph(SPARQLGraph):
         except HTTPError as e:
             if e.code == 204:
                 return
-            else:
-                log.error(e)
+            log.error(e)
+            raise
+
         return result
 
-    def triples(self, xxx_todo_changeme3, context=None):
+    def triples(self, triple_pattern, context=None):
         """
         Generator over the triple store
 
         Returns triples that match the given triple pattern. If triple pattern
         does not provide a context, all contexts will be searched.
         """
-        (s, p, o) = xxx_todo_changeme3
+        (s, p, o) = triple_pattern
         url = self._statement_encode((s, p, o), context)
         req = Request(url)
         req.add_header('Accept', 'text/plain')
-                       # N-Triples is best for generator (one line per triple)
-        log.debug("Request: %s" % req.get_full_url())
+        # N-Triples is best for generator (one line per triple)
+        log.debug("Request: %s", req.get_full_url())
         dumper = DumpSink()
         parser = NTriplesParser(dumper)
 
-        for l in urlopen(req):
-            log.debug('line: %s' % l)
-            parser.parsestring(l)
+        for line in urlopen(req):
+            log.debug('line: %s', line)
+            parser.parsestring(line)
             yield dumper.get_triple()
 
     def __len__(self):
-        """Returns the number of triples in the graph
+        """
+        Returns the number of triples in the graph
         calls http://{self.url}/size  very fast
         """
         return int(urlopen(self.url + "/size").read())
 
-    def set(self, xxx_todo_changeme4):
-        """Convenience method to update the value of object
+    def set(self, triple_pattern):
+        """
+        Convenience method to update the value of object
 
         Remove any existing triples for subject and predicate before adding
         (subject, predicate, object).
         """
-        (subject, predicate, object) = xxx_todo_changeme4
+        (subject, predicate, object) = triple_pattern
         self.remove((subject, predicate, None))
         self.add((subject, predicate, object))
 
     def qname(self, uri):
-        """turn uri into a qname given self.namespaces"""
+        """
+        turn uri into a qname given self.namespaces
+        """
         for p, n in self.namespaces.items():
             if uri.startswith(n):
-                return "%s:%s" % (p, uri[len(n):])
+                return f"{p}:{uri[len(n):]}"
         return uri
 
-    def query(
-            self, str_or_query, init_bindings={}, init_ns={},
-            result_method="brtr", processor="sparql", raw_results=False):
+    def query(self, str_or_query, init_bindings=None, init_ns=None,
+              result_method="brtr", processor="sparql", raw_results=False):
         """
         Executes a SPARQL query against this Graph
 
@@ -204,7 +209,11 @@ class SesameGraph(SPARQLGraph):
             stream rather than the parsed results.
         """
         # same method as super with different result_method default
-        return super(SesameGraph, self).query(
+        if init_ns is None:
+            init_ns = {}
+        if init_bindings is None:
+            init_bindings = {}
+        return super().query(
             str_or_query, init_bindings, init_ns,
             result_method, processor, raw_results)
 
@@ -228,7 +237,8 @@ class SesameGraph(SPARQLGraph):
           * 'PUT' -- method replaces data in a context
         """
         url = self.url + '/statements'
-        if not (source.startswith('http://') or source.startswith('file://')):
+        parsed = urlparse(url)
+        if parsed.scheme not in ('http', 'https') or parsed.scheme == 'file':
             source = 'file://' + os.path.abspath(os.path.expanduser(source))
 
         ctx = "<%s>" % (publicID or source)
@@ -242,19 +252,19 @@ class SesameGraph(SPARQLGraph):
         elif format == 'n3':
             req.add_header('Content-Type', 'text/rdf+n3')
         else:
-            raise "Unknown format: %s" % format
+            raise f"Unknown format: {format}"
 
         req.data = urlopen(source).read()
-        log.debug("Request: %s" % req.get_full_url())
+        log.debug("Request: %s", req.get_full_url())
         try:
             result = urlopen(req).read()
-            log.debug("Result: " + result)
+            log.debug("Result: %s", result)
         except HTTPError as e:
             # 204 is actually the "success" code
             if e.code == 204:
                 return
             log.error(e)
-            raise e
+            raise
         return result
 
     def load(self, source, publicID=None, format="xml"):

@@ -148,8 +148,7 @@ class _BRTRSPARQLHandler(_SPARQLHandler):
     """
     Handler for the sesame binary table format BRTR_
 
-    .. _BRTR: https://www.openrdf.org/doc/sesame/api/org/openrdf
-    /sesame/query/BinaryTableResultConstants.html
+    .. _BRTR: https://www.openrdf.org/doc/sesame/api/org/openrdf/sesame/query/BinaryTableResultConstants.html
     """
     mimetype = "application/x-binary-rdf-results-table"
 
